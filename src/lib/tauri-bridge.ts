@@ -1,37 +1,25 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+
 import type { PersistedAppData } from "@/types/task";
 
-const STORAGE_KEY = "tasktimer.state.v1";
+export { isTauri };
 
-interface TauriInternals {
-  invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+/** @deprecated Prefer `isTauri()` from `@tauri-apps/api/core`. */
+export const isTauriRuntime = isTauri;
+
+export const STORAGE_KEY = "tasktimer.state.v1";
+
+export interface AppInfo {
+  name: string;
+  version: string;
 }
 
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: TauriInternals;
-  }
-}
+export type LoadPersistedResult =
+  | { status: "ready"; data: PersistedAppData }
+  | { status: "empty" }
+  | { status: "error"; message: string };
 
-export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && typeof window.__TAURI_INTERNALS__?.invoke === "function";
-}
-
-async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
-  if (!isTauriRuntime()) return null;
-  try {
-    return await window.__TAURI_INTERNALS__!.invoke<T>(command, args);
-  } catch (error) {
-    console.error(`[TaskTimer] Falha ao invocar comando Tauri "${command}":`, error);
-    return null;
-  }
-}
-
-export async function loadPersistedData(): Promise<PersistedAppData | null> {
-  if (isTauriRuntime()) {
-    const fromTauri = await invokeTauri<PersistedAppData | null>("load_tasks");
-    if (fromTauri) return fromTauri;
-  }
-
+function readLocalStorage(): PersistedAppData | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -44,41 +32,89 @@ export async function loadPersistedData(): Promise<PersistedAppData | null> {
   }
 }
 
-export async function savePersistedData(data: PersistedAppData): Promise<void> {
-  if (typeof window !== "undefined") {
+function writeLocalStorage(data: PersistedAppData): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error("[TaskTimer] Falha ao gravar no localStorage:", error);
+  }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
+export async function getAppInfo(): Promise<AppInfo | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<AppInfo>("get_app_info");
+  } catch (error) {
+    console.error('[TaskTimer] Falha ao invocar comando Tauri "get_app_info":', error);
+    return null;
+  }
+}
+
+export async function loadPersistedData(): Promise<LoadPersistedResult> {
+  if (isTauri()) {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      const fromTauri = await invoke<PersistedAppData | null>("load_app_data");
+      if (fromTauri == null) {
+        // File is genuinely absent — migrate a leftover browser snapshot if any.
+      } else if (Array.isArray(fromTauri.tasks)) {
+        return { status: "ready", data: fromTauri };
+      } else {
+        return { status: "error", message: "O arquivo de dados do app está em um formato inesperado." };
+      }
     } catch (error) {
-      console.error("[TaskTimer] Falha ao gravar no localStorage:", error);
+      console.error('[TaskTimer] Falha ao invocar comando Tauri "load_app_data":', error);
+      return { status: "error", message: errorMessage(error) };
+    }
+
+    const fromWeb = readLocalStorage();
+    if (fromWeb) {
+      try {
+        await invoke("save_app_data", { payload: fromWeb });
+      } catch (error) {
+        console.error("[TaskTimer] Falha ao migrar localStorage para o backend Tauri:", error);
+      }
+      return { status: "ready", data: fromWeb };
+    }
+
+    return { status: "empty" };
+  }
+
+  const fromWeb = readLocalStorage();
+  return fromWeb ? { status: "ready", data: fromWeb } : { status: "empty" };
+}
+
+export async function savePersistedData(data: PersistedAppData): Promise<void> {
+  if (isTauri()) {
+    try {
+      await invoke("save_app_data", { payload: data });
+      return;
+    } catch (error) {
+      console.error('[TaskTimer] Falha ao invocar comando Tauri "save_app_data":', error);
+      writeLocalStorage(data);
+      return;
     }
   }
 
-  if (isTauriRuntime()) {
-    await invokeTauri("save_tasks", { payload: data });
-  }
+  writeLocalStorage(data);
 }
 
+// --- Later steps (tray, single-instance, native notifications). Stubs keep the UI working. ---
+
 export async function minimizeToTray(): Promise<boolean> {
-  if (isTauriRuntime()) {
-    await invokeTauri("minimize_to_tray");
-    return true;
-  }
   return false;
 }
 
-export async function setStartMinimizedPreference(enabled: boolean): Promise<boolean> {
-  if (isTauriRuntime()) {
-    await invokeTauri("set_start_minimized", { enabled });
-    return true;
-  }
+export async function setStartMinimizedPreference(_enabled: boolean): Promise<boolean> {
   return false;
 }
 
 export async function ensureSingleInstance(): Promise<boolean> {
-  if (isTauriRuntime()) {
-    const ok = await invokeTauri<boolean>("check_single_instance");
-    return ok ?? true;
-  }
   return true;
 }
 
@@ -88,11 +124,6 @@ export async function sendOvertimeNotification(
 ): Promise<"tauri" | "browser" | "toast-only"> {
   const title = "Tempo estimado ultrapassado";
   const body = `"${taskName}" passou de ${estimatedMinutes} min estimados.`;
-
-  if (isTauriRuntime()) {
-    await invokeTauri("send_native_notification", { title, body });
-    return "tauri";
-  }
 
   if (typeof window !== "undefined" && "Notification" in window) {
     if (Notification.permission === "granted") {

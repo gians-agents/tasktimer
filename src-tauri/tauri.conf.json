@@ -15,7 +15,9 @@
         "label": "main",
         "title": "TaskTimer",
         "width": 900,
-        "height": 700
+        "height": 700,
+        "minWidth": 720,
+        "minHeight": 520
       }
     ],
     "security": {

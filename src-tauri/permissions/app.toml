@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-get-app-info"
+description = "Allows reading the application name and version."
+commands.allow = ["get_app_info"]
+
+[[permission]]
+identifier = "allow-load-app-data"
+description = "Allows loading persisted tasks and settings from the app data directory."
+commands.allow = ["load_app_data"]
+
+[[permission]]
+identifier = "allow-save-app-data"
+description = "Allows saving persisted tasks and settings to the app data directory."
+commands.allow = ["save_app_data"]

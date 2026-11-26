@@ -35,6 +35,8 @@ function Index() {
     activeTasks,
     historyTasks,
     settings,
+    appInfo,
+    storageError,
     hydrated,
     nowMs,
     addTask,
@@ -67,6 +69,7 @@ function Index() {
       <Header
         historyCount={historyTasks.length}
         startMinimized={settings.startMinimized}
+        appVersion={appInfo?.version}
         onAddClick={openCreateDialog}
         onHistoryClick={() => setHistoryOpen(true)}
         onExportJson={exportJson}
@@ -76,6 +79,18 @@ function Index() {
       />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
+        {storageError ? (
+          <div
+            role="alert"
+            className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-foreground"
+          >
+            <p className="font-medium">Não foi possível carregar as tarefas salvas.</p>
+            <p className="mt-1 text-muted-foreground">
+              O arquivo do app foi preservado para não sobrescrever seus dados. {storageError}
+            </p>
+          </div>
+        ) : null}
+
         {!hydrated ? (
           <div className="space-y-4" aria-busy="true">
             <div className="h-40 animate-pulse rounded-2xl border border-border bg-card/60" />
