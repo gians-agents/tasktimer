@@ -1,40 +1,30 @@
-# Task Timer
+# TaskTimer
 
-Funcionalidades principais:
+O TaskTimer é um aplicativo multipataforma de timer de tarefas. Ele ajuda a acompanhar o tempo gasto em cada atividade, com progresso visual, histórico e persistência local.
 
-- Lista de tarefas ativas, cada uma em um card com:
+A interface atual é uma aplicação web (Vite, React e TanStack Start). A integração com o Tauri está planejada para distribuir o app no desktop e, no futuro, em outras plataformas.
 
-- - Nome da tarefa
+## Funcionalidades
 
-- - Timer no formato HH:MM:SS / HH:MM:SS (tempo decorrido / tempo estimado)
+- Lista de tarefas ativas em cards, com nome, timer no formato HH:MM:SS / tempo estimado, horas decimais e barra de progresso
+- Ações por tarefa: play/pause, editar, concluir, cancelar e excluir
+- Inclusão de novas tarefas (nome e tempo estimado em minutos)
+- Histórico de tarefas concluídas e canceladas
+- Tema claro/escuro conforme o sistema
+- Exportação e importação de tarefas em JSON
+- Persistência local (as tarefas permanecem ao fechar e reabrir o app)
 
-- - Abaixo do timer, um número menor mostrando as horas decimais decorridas (ex: 0.2, 1.5, 3)
+Recursos nativos como bandeja do sistema, iniciar minimizado, instância única e notificações ao ultrapassar o tempo estimado entram com a integração do Tauri.
 
-- - Barra de progresso full-width com porcentagem ao lado
-
-- - Botões: Play/Pause, Editar, Concluir (destaque), Cancelar, Excluir
-
-- Botão “+” no header para adicionar nova tarefa (nome + tempo estimado em minutos)
-
-- Botão de histórico no header (mostra tarefas concluídas e canceladas)
-
-- Minimizar para a bandeja do sistema (tray)
-
-- Opção de iniciar minimizado
-
-- Instância única
-
-- Tema claro/escuro automático
-
-- Exportar e importar tarefas em JSON
-
-- Notificação nativa quando uma tarefa ultrapassar o tempo estimado
-
-- Persistência local (as tarefas continuam ao fechar e reabrir o app)
+## Desenvolvimento
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install
+bun run dev
+```
+
+Também é possível usar `npm install` e `npm run dev`. Para o build de produção:
+
+```sh
+bun run build
 ```
