@@ -1,0 +1,148 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os_name }}
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            os_name: linux
+          - platform: windows-latest
+            os_name: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            dpkg-dev
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Tauri app
+        env:
+          # linuxdeploy is an AppImage; this avoids a FUSE mount on the runner.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: bun run tauri build
+
+      - name: Checksums (Linux)
+        if: matrix.os_name == 'linux'
+        run: |
+          set -euo pipefail
+          mkdir -p dist-artifacts
+          : > dist-artifacts/SHA256SUMS-linux
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            name=$(basename "$file")
+            cp "$file" "dist-artifacts/$name"
+            (cd dist-artifacts && sha256sum "$name" | tee "$name.sha256" >> SHA256SUMS-linux)
+          done < <(find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -print0)
+          if [ "$found" -eq 0 ]; then
+            echo "No Linux artifacts (AppImage/deb) were found." >&2
+            find src-tauri/target/release/bundle -type f || true
+            exit 1
+          fi
+          ls -la dist-artifacts
+
+      - name: Checksums (Windows)
+        if: matrix.os_name == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist-artifacts | Out-Null
+          $files = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -File |
+            Where-Object { $_.Extension -in '.exe', '.msi' }
+          if (-not $files) {
+            Write-Error "No Windows artifacts (NSIS .exe / MSI) were found."
+          }
+          $outDir = (Resolve-Path 'dist-artifacts').Path
+          $sums = New-Object System.Collections.Generic.List[string]
+          foreach ($file in $files) {
+            Copy-Item $file.FullName (Join-Path $outDir $file.Name)
+            $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
+            $line = "$hash  $($file.Name)"
+            [System.IO.File]::WriteAllText((Join-Path $outDir ($file.Name + '.sha256')), $line + "`n")
+            $sums.Add($line)
+          }
+          [System.IO.File]::WriteAllText((Join-Path $outDir 'SHA256SUMS-windows'), (($sums -join "`n") + "`n"))
+          Get-ChildItem dist-artifacts | Format-Table Name, Length
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskTimer-${{ matrix.os_name }}
+          path: dist-artifacts/*
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Combine checksum manifests
+        run: |
+          set -euo pipefail
+          cat release-assets/SHA256SUMS-linux release-assets/SHA256SUMS-windows > release-assets/SHA256SUMS
+          ls -la release-assets
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: TaskTimer ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

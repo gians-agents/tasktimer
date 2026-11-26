@@ -5,6 +5,13 @@ import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
+// Tauri ships a static frontend. SPA mode prerenders a client shell (index.html)
+// instead of the Nitro Node server used by `bun run build`.
+const isTauriBuild =
+  process.env.TAURI === "1" ||
+  Boolean(process.env.TAURI_ENV_PLATFORM) ||
+  process.env.npm_lifecycle_event === "build:tauri";
+
 export default defineConfig({
   plugins: [
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
@@ -12,6 +19,16 @@ export default defineConfig({
     tanstackStart({
       srcDirectory: "src",
       server: { entry: "./server.ts" },
+      ...(isTauriBuild
+        ? {
+            spa: {
+              enabled: true,
+              prerender: {
+                outputPath: "/index.html",
+              },
+            },
+          }
+        : {}),
     }),
     nitro(),
     viteReact(),
