@@ -1,5 +1,5 @@
-use tauri::{AppHandle, Emitter, Manager};
 use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::storage::{self, PersistedAppData};
 
