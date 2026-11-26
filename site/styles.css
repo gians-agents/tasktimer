@@ -315,6 +315,18 @@ a:hover {
   border-radius: inherit;
 }
 
+.mock-bar-fill-54 {
+  width: 54%;
+}
+
+.mock-bar-fill-100 {
+  width: 100%;
+}
+
+.mock-bar-fill-42 {
+  width: 42%;
+}
+
 .mock-card-over .mock-bar span {
   background: #c49212;
 }

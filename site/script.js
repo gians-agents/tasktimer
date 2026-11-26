@@ -39,6 +39,12 @@ function show(el, visible) {
   el.hidden = !visible;
 }
 
+function setDownloadLinks(url) {
+  for (const link of document.querySelectorAll(".download-link")) {
+    link.href = url;
+  }
+}
+
 async function tryReadSums(url) {
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok) {
@@ -92,6 +98,8 @@ async function loadLatestRelease() {
     }
     release = await response.json();
   } catch {
+    // Sem release (404), rede ou rate limit: não deixar o clique em 404 de /download/.
+    setDownloadLinks(RELEASES_PAGE);
     renderHashes({});
     return;
   }
@@ -109,7 +117,7 @@ async function loadLatestRelease() {
     if (asset?.browser_download_url) {
       link.href = asset.browser_download_url;
     } else {
-      link.href = release.html_url || LATEST_PAGE;
+      link.href = release.html_url || RELEASES_PAGE;
     }
   }
 

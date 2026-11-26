@@ -139,6 +139,12 @@ def main() -> None:
         errors.append("index.html must include ./script.js")
 
     links_by_id = {link_id: href for link_id, href, _kind, _cls in parser.links if link_id}
+    fallback_hrefs = {
+        RELEASES_HOST,
+        RELEASES_HOST + "/",
+        RELEASES_HOST + "/latest",
+        RELEASES_HOST + "/latest/",
+    }
     for element_id, (suffix, kind) in DOWNLOAD_KINDS.items():
         href = links_by_id.get(element_id)
         if not href:
@@ -146,6 +152,10 @@ def main() -> None:
             continue
         if not href.startswith(RELEASES_HOST):
             errors.append(f"{element_id} should point at GitHub Releases, got {href}")
+            continue
+        if href in fallback_hrefs:
+            # Initial href may point at the releases page until a release exists.
+            continue
         if suffix == ".appimage":
             if not href.lower().endswith(".appimage"):
                 errors.append(f"{element_id} should point to an AppImage, got {href}")
@@ -163,6 +173,8 @@ def main() -> None:
     script = (SITE / "script.js").read_text(encoding="utf-8") if (SITE / "script.js").is_file() else ""
     if "releases/latest" not in script and "releases/latest" not in html_text:
         errors.append("site should reference GitHub Releases latest URLs")
+    if "setDownloadLinks(RELEASES_PAGE)" not in script:
+        errors.append("script.js must point download buttons at the releases page when the API fails")
     if REQUIRED_PHRASE not in script and REQUIRED_PHRASE not in html_text:
         errors.append("script/html must keep the hash fallback text")
 
