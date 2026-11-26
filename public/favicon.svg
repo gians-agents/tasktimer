@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- TaskTimer app icon: flat stopwatch on teal -->
+  <rect width="1024" height="1024" fill="#0D6E78"/>
+
+  <!-- Stem connecting crown to dial -->
+  <rect x="464" y="138" width="96" height="80" rx="16" fill="#F5C542"/>
+
+  <!-- Top crown / start-stop button -->
+  <rect x="384" y="72" width="256" height="104" rx="32" fill="#F5C542"/>
+
+  <!-- Dial face -->
+  <circle cx="512" cy="580" r="360" fill="#0A5962"/>
+  <circle cx="512" cy="580" r="332" fill="none" stroke="#F3F7F7" stroke-width="68"/>
+
+  <!-- Cardinal ticks (12 omitted — the stem sits there) -->
+  <g stroke="#F3F7F7" stroke-width="44" stroke-linecap="butt">
+    <!-- 3 -->
+    <line x1="772" y1="580" x2="840" y2="580"/>
+    <!-- 6 -->
+    <line x1="512" y1="780" x2="512" y2="848"/>
+    <!-- 9 -->
+    <line x1="252" y1="580" x2="184" y2="580"/>
+  </g>
+
+  <!-- Single stopwatch hand, ~1:30 / 45° for a clean diagonal at small sizes -->
+  <line x1="512" y1="580" x2="718" y2="374"
+        stroke="#F5C542" stroke-width="52" stroke-linecap="round"/>
+
+  <!-- Center cap -->
+  <circle cx="512" cy="580" r="52" fill="#F5C542"/>
+</svg>
