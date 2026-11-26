@@ -22,6 +22,7 @@ import {
 interface HeaderProps {
   historyCount: number;
   startMinimized: boolean;
+  appVersion?: string | null;
   onAddClick: () => void;
   onHistoryClick: () => void;
   onExportJson: () => void;
@@ -33,6 +34,7 @@ interface HeaderProps {
 export function Header({
   historyCount,
   startMinimized,
+  appVersion,
   onAddClick,
   onHistoryClick,
   onExportJson,
@@ -49,7 +51,12 @@ export function Header({
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/12 text-primary">
             <Timer className="h-4.5 w-4.5" aria-hidden="true" />
           </span>
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">TaskTimer</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">TaskTimer</h1>
+            {appVersion ? (
+              <span className="timer-digits text-xs text-muted-foreground">v{appVersion}</span>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

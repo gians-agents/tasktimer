@@ -4,12 +4,14 @@ import { toast } from "sonner";
 import { createSampleTasks } from "@/lib/sample-tasks";
 import {
   ensureSingleInstance,
-  isTauriRuntime,
+  getAppInfo,
+  isTauri,
   loadPersistedData,
   minimizeToTray,
   savePersistedData,
   sendOvertimeNotification,
   setStartMinimizedPreference,
+  type AppInfo,
 } from "@/lib/tauri-bridge";
 import {
   getLiveElapsedSeconds,
@@ -23,6 +25,7 @@ const DEFAULT_SETTINGS: AppSettings = { startMinimized: false };
 export function useTaskTimer() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const tasksRef = useRef<Task[]>([]);
@@ -44,7 +47,7 @@ export function useTaskTimer() {
     let cancelled = false;
     void (async () => {
       await ensureSingleInstance();
-      const saved = await loadPersistedData();
+      const [saved, info] = await Promise.all([loadPersistedData(), getAppInfo()]);
       if (cancelled) return;
       if (saved) {
         setTasks(saved.tasks);
@@ -52,6 +55,7 @@ export function useTaskTimer() {
       } else {
         setTasks(createSampleTasks());
       }
+      if (info) setAppInfo(info);
       setNowMs(Date.now());
       setHydrated(true);
     })();
@@ -153,7 +157,7 @@ export function useTaskTimer() {
       const now = Date.now();
       setNowMs(now);
       if (
-        !isTauriRuntime() &&
+        !isTauri() &&
         typeof window !== "undefined" &&
         "Notification" in window &&
         Notification.permission === "default"
@@ -286,6 +290,7 @@ export function useTaskTimer() {
     activeTasks,
     historyTasks,
     settings,
+    appInfo,
     hydrated,
     nowMs,
     addTask,

@@ -35,6 +35,7 @@ function Index() {
     activeTasks,
     historyTasks,
     settings,
+    appInfo,
     hydrated,
     nowMs,
     addTask,
@@ -67,6 +68,7 @@ function Index() {
       <Header
         historyCount={historyTasks.length}
         startMinimized={settings.startMinimized}
+        appVersion={appInfo?.version}
         onAddClick={openCreateDialog}
         onHistoryClick={() => setHistoryOpen(true)}
         onExportJson={exportJson}
