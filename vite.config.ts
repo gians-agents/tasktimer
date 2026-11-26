@@ -13,6 +13,9 @@ const isTauriBuild =
   process.env.npm_lifecycle_event === "build:tauri";
 
 export default defineConfig({
+  // Official Tauri + Vite guidance: don't clear the terminal (Rust errors),
+  // fail if the configured port is busy, and don't restart on Rust rebuilds.
+  clearScreen: false,
   plugins: [
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
@@ -33,4 +36,11 @@ export default defineConfig({
     nitro(),
     viteReact(),
   ],
+  server: {
+    port: 5173,
+    strictPort: true,
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
+  },
 });
