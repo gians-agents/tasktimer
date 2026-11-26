@@ -1,0 +1,193 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Resolve bun cache directory
+        id: bun-cache
+        shell: bash
+        run: echo "dir=$HOME/.bun/install/cache" >> "$GITHUB_OUTPUT"
+
+      - name: Cache bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.bun-cache.outputs.dir }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
+
+  build:
+    name: ${{ matrix.os_name }}
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            os_name: linux
+          - platform: windows-latest
+            os_name: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Resolve bun cache directory
+        id: bun-cache
+        shell: bash
+        run: echo "dir=$HOME/.bun/install/cache" >> "$GITHUB_OUTPUT"
+
+      - name: Cache bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.bun-cache.outputs.dir }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            dpkg-dev
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Tauri app
+        env:
+          # linuxdeploy is an AppImage; this avoids a FUSE mount on the runner.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: bun run tauri build
+
+      - name: Checksums (Linux)
+        if: matrix.os_name == 'linux'
+        run: |
+          set -euo pipefail
+          mkdir -p dist-artifacts
+          : > dist-artifacts/SHA256SUMS-linux
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            name=$(basename "$file")
+            cp "$file" "dist-artifacts/$name"
+            (cd dist-artifacts && sha256sum "$name" | tee "$name.sha256" >> SHA256SUMS-linux)
+          done < <(find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -print0)
+          if [ "$found" -eq 0 ]; then
+            echo "No Linux artifacts (AppImage/deb) were found." >&2
+            find src-tauri/target/release/bundle -type f || true
+            exit 1
+          fi
+          ls -la dist-artifacts
+
+      - name: Checksums (Windows)
+        if: matrix.os_name == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist-artifacts | Out-Null
+          $files = Get-ChildItem -Path src-tauri/target/release/bundle -Recurse -File |
+            Where-Object { $_.Extension -in '.exe', '.msi' }
+          if (-not $files) {
+            Write-Error "No Windows artifacts (NSIS .exe / MSI) were found."
+          }
+          $outDir = (Resolve-Path 'dist-artifacts').Path
+          $sums = New-Object System.Collections.Generic.List[string]
+          foreach ($file in $files) {
+            Copy-Item $file.FullName (Join-Path $outDir $file.Name)
+            $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
+            $line = "$hash  $($file.Name)"
+            [System.IO.File]::WriteAllText((Join-Path $outDir ($file.Name + '.sha256')), $line + "`n")
+            $sums.Add($line)
+          }
+          [System.IO.File]::WriteAllText((Join-Path $outDir 'SHA256SUMS-windows'), (($sums -join "`n") + "`n"))
+          Get-ChildItem dist-artifacts | Format-Table Name, Length
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: TaskTimer-${{ matrix.os_name }}
+          path: dist-artifacts/*
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Combine checksum manifests
+        run: |
+          set -euo pipefail
+          cat release-assets/SHA256SUMS-linux release-assets/SHA256SUMS-windows > release-assets/SHA256SUMS
+          ls -la release-assets
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          draft: true
+          name: TaskTimer ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
