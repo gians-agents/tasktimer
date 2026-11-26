@@ -14,6 +14,11 @@ export interface AppInfo {
   version: string;
 }
 
+export type LoadPersistedResult =
+  | { status: "ready"; data: PersistedAppData }
+  | { status: "empty" }
+  | { status: "error"; message: string };
+
 function readLocalStorage(): PersistedAppData | null {
   if (typeof window === "undefined") return null;
   try {
@@ -36,6 +41,11 @@ function writeLocalStorage(data: PersistedAppData): void {
   }
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
 export async function getAppInfo(): Promise<AppInfo | null> {
   if (!isTauri()) return null;
   try {
@@ -46,18 +56,22 @@ export async function getAppInfo(): Promise<AppInfo | null> {
   }
 }
 
-export async function loadPersistedData(): Promise<PersistedAppData | null> {
+export async function loadPersistedData(): Promise<LoadPersistedResult> {
   if (isTauri()) {
     try {
       const fromTauri = await invoke<PersistedAppData | null>("load_app_data");
-      if (fromTauri && Array.isArray(fromTauri.tasks)) {
-        return fromTauri;
+      if (fromTauri == null) {
+        // File is genuinely absent — migrate a leftover browser snapshot if any.
+      } else if (Array.isArray(fromTauri.tasks)) {
+        return { status: "ready", data: fromTauri };
+      } else {
+        return { status: "error", message: "O arquivo de dados do app está em um formato inesperado." };
       }
     } catch (error) {
       console.error('[TaskTimer] Falha ao invocar comando Tauri "load_app_data":', error);
+      return { status: "error", message: errorMessage(error) };
     }
 
-    // First desktop run: migrate a previous browser/localStorage snapshot if present.
     const fromWeb = readLocalStorage();
     if (fromWeb) {
       try {
@@ -65,13 +79,14 @@ export async function loadPersistedData(): Promise<PersistedAppData | null> {
       } catch (error) {
         console.error("[TaskTimer] Falha ao migrar localStorage para o backend Tauri:", error);
       }
-      return fromWeb;
+      return { status: "ready", data: fromWeb };
     }
 
-    return null;
+    return { status: "empty" };
   }
 
-  return readLocalStorage();
+  const fromWeb = readLocalStorage();
+  return fromWeb ? { status: "ready", data: fromWeb } : { status: "empty" };
 }
 
 export async function savePersistedData(data: PersistedAppData): Promise<void> {

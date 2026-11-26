@@ -26,15 +26,20 @@ export function useTaskTimer() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const tasksRef = useRef<Task[]>([]);
   const settingsRef = useRef<AppSettings>(DEFAULT_SETTINGS);
+  const persistBlockedRef = useRef(false);
 
   tasksRef.current = tasks;
   settingsRef.current = settings;
 
   const persist = useCallback((nextTasks: Task[], nextSettings: AppSettings) => {
+    if (persistBlockedRef.current) {
+      return;
+    }
     const payload: PersistedAppData = {
       version: 1,
       tasks: nextTasks,
@@ -47,13 +52,19 @@ export function useTaskTimer() {
     let cancelled = false;
     void (async () => {
       await ensureSingleInstance();
-      const [saved, info] = await Promise.all([loadPersistedData(), getAppInfo()]);
+      const [loaded, info] = await Promise.all([loadPersistedData(), getAppInfo()]);
       if (cancelled) return;
-      if (saved) {
-        setTasks(saved.tasks);
-        setSettings(saved.settings ?? DEFAULT_SETTINGS);
-      } else {
+      if (loaded.status === "ready") {
+        setTasks(loaded.data.tasks);
+        setSettings(loaded.data.settings ?? DEFAULT_SETTINGS);
+      } else if (loaded.status === "empty") {
         setTasks(createSampleTasks());
+      } else {
+        persistBlockedRef.current = true;
+        setStorageError(loaded.message);
+        toast.error("Não foi possível carregar as tarefas salvas", {
+          description: "O arquivo local não foi alterado. Feche o app e tente novamente, ou restaure um backup.",
+        });
       }
       if (info) setAppInfo(info);
       setNowMs(Date.now());
@@ -291,6 +302,7 @@ export function useTaskTimer() {
     historyTasks,
     settings,
     appInfo,
+    storageError,
     hydrated,
     nowMs,
     addTask,

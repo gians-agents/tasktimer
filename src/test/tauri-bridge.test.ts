@@ -44,17 +44,17 @@ describe("Tauri persistence adapter", () => {
   });
 
   it("reads and writes localStorage when not running inside Tauri", async () => {
-    expect(await loadPersistedData()).toBeNull();
+    expect(await loadPersistedData()).toEqual({ status: "empty" });
     await savePersistedData(sample);
     expect(invoke).not.toHaveBeenCalled();
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null");
     expect(stored.tasks[0].name).toBe("Revisar PR");
-    expect(await loadPersistedData()).toEqual(sample);
+    expect(await loadPersistedData()).toEqual({ status: "ready", data: sample });
   });
 
   it("returns null for malformed localStorage JSON", async () => {
     window.localStorage.setItem(STORAGE_KEY, "{not-json");
-    expect(await loadPersistedData()).toBeNull();
+    expect(await loadPersistedData()).toEqual({ status: "empty" });
   });
 
   it("uses invoke for get_app_info, load_app_data and save_app_data inside Tauri", async () => {
@@ -70,7 +70,7 @@ describe("Tauri persistence adapter", () => {
     expect(await getAppInfo()).toEqual(info);
     expect(invoke).toHaveBeenCalledWith("get_app_info");
 
-    expect(await loadPersistedData()).toEqual(sample);
+    expect(await loadPersistedData()).toEqual({ status: "ready", data: sample });
     expect(invoke).toHaveBeenCalledWith("load_app_data");
 
     await savePersistedData(sample);
@@ -87,7 +87,7 @@ describe("Tauri persistence adapter", () => {
       throw new Error(`unexpected command ${cmd}`);
     });
 
-    expect(await loadPersistedData()).toEqual(sample);
+    expect(await loadPersistedData()).toEqual({ status: "ready", data: sample });
     expect(invoke).toHaveBeenCalledWith("save_app_data", { payload: sample });
   });
 
@@ -103,5 +103,21 @@ describe("Tauri persistence adapter", () => {
   it("getAppInfo returns null in the browser without calling invoke", async () => {
     expect(await getAppInfo()).toBeNull();
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("does not migrate localStorage or report empty when Tauri load fails", async () => {
+    isTauri.mockReturnValue(true);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sample));
+    invoke.mockRejectedValue(new Error("JSON inválido: linha 1"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await loadPersistedData()).toEqual({
+      status: "error",
+      message: "JSON inválido: linha 1",
+    });
+    expect(invoke).toHaveBeenCalledWith("load_app_data");
+    expect(invoke).not.toHaveBeenCalledWith("save_app_data", expect.anything());
+
+    spy.mockRestore();
   });
 });
