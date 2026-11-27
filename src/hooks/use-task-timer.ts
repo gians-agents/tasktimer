@@ -14,6 +14,7 @@ import {
   type AppInfo,
 } from "@/lib/tauri-bridge";
 import {
+  findNewlyOvertimeTasks,
   getLiveElapsedSeconds,
   parseImportedJson,
   serializeExportData,
@@ -77,37 +78,55 @@ export function useTaskTimer() {
 
   const hasRunningTask = useMemo(() => tasks.some((t) => t.isRunning), [tasks]);
 
+  const checkOvertime = useCallback(
+    (now: number) => {
+      setNowMs(now);
+      const { tasks: updated, newlyOvertime } = findNewlyOvertimeTasks(tasksRef.current, now);
+      if (newlyOvertime.length === 0) return;
+      setTasks(updated);
+      persist(updated, settingsRef.current);
+      for (const task of newlyOvertime) {
+        void sendOvertimeNotification(task.name, task.estimatedMinutes);
+        toast.warning(`Tempo estimado ultrapassado`, {
+          description: `"${task.name}" passou de ${task.estimatedMinutes} min.`,
+        });
+      }
+    },
+    [persist],
+  );
+
   useEffect(() => {
     if (!hasRunningTask) return;
-    const interval = window.setInterval(() => {
-      const now = Date.now();
-      setNowMs(now);
+    const tick = () => checkOvertime(Date.now());
+    const interval = window.setInterval(tick, 1000);
+    // If the webview was throttled while hidden, run the wall-clock check as soon as
+    // the window is shown again (notifications may still have been delayed until then).
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    if (isTauri()) {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) =>
+          getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+            if (focused) tick();
+          }),
+        )
+        .then((fn) => {
+          if (cancelled) fn();
+          else unlisten = fn;
+        })
+        .catch(() => {});
+    }
 
-      const newlyOvertime: Task[] = [];
-      const updated = tasksRef.current.map((task) => {
-        if (!task.isRunning || task.overtimeNotified) return task;
-        const elapsed = getLiveElapsedSeconds(task, now);
-        if (elapsed >= task.estimatedMinutes * 60) {
-          newlyOvertime.push(task);
-          return { ...task, overtimeNotified: true };
-        }
-        return task;
-      });
-
-      if (newlyOvertime.length > 0) {
-        setTasks(updated);
-        persist(updated, settingsRef.current);
-        for (const task of newlyOvertime) {
-          void sendOvertimeNotification(task.name, task.estimatedMinutes);
-          toast.warning(`Tempo estimado ultrapassado`, {
-            description: `"${task.name}" passou de ${task.estimatedMinutes} min.`,
-          });
-        }
-      }
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [hasRunningTask, persist]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
+      unlisten?.();
+    };
+  }, [hasRunningTask, checkOvertime]);
 
   const updateTasks = useCallback(
     (updater: (current: Task[]) => Task[]) => {

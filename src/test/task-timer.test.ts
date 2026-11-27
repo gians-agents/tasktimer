@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  findNewlyOvertimeTasks,
   formatDecimalHours,
   formatDuration,
+  getLiveElapsedSeconds,
   getProgressPercent,
   getProgressTone,
   parseImportedJson,
   validateTaskDraft,
 } from "@/lib/time-utils";
+import type { Task } from "@/types/task";
 
 describe("TaskTimer time & progress rules", () => {
   it("formats elapsed and estimated durations as HH:MM:SS", () => {
@@ -72,5 +75,35 @@ describe("TaskTimer time & progress rules", () => {
     expect(parsed.tasks[0]?.lastStartedAt).toBeNull();
     expect(() => parseImportedJson("not-json")).toThrow();
     expect(() => parseImportedJson(JSON.stringify({ invalid: true }))).toThrow();
+  });
+});
+describe("overtime detection after a delayed tick", () => {
+  const base: Task = {
+    id: "t-1",
+    name: "Revisar PR",
+    estimatedMinutes: 1,
+    elapsedSeconds: 10,
+    status: "active",
+    isRunning: true,
+    lastStartedAt: 1_000_000,
+    overtimeNotified: false,
+    createdAt: "2026-11-26T10:00:00.000Z",
+    finishedAt: null,
+  };
+
+  it("uses lastStartedAt so a long pause still counts as overtime", () => {
+    // 10s already elapsed + 80s wall-clock since lastStartedAt = 90s >= 60s estimate.
+    const now = 1_000_000 + 80_000;
+    expect(getLiveElapsedSeconds(base, now)).toBe(90);
+    const { tasks, newlyOvertime } = findNewlyOvertimeTasks([base], now);
+    expect(newlyOvertime).toHaveLength(1);
+    expect(newlyOvertime[0]?.id).toBe("t-1");
+    expect(tasks[0]?.overtimeNotified).toBe(true);
+  });
+
+  it("does not notify a task that is paused or already flagged", () => {
+    const paused = { ...base, isRunning: false, lastStartedAt: null };
+    const already = { ...base, overtimeNotified: true };
+    expect(findNewlyOvertimeTasks([paused, already], 1_000_000 + 80_000).newlyOvertime).toEqual([]);
   });
 });

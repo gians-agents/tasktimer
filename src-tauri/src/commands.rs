@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::storage::{self, PersistedAppData};
+use crate::tray;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AppInfo {
@@ -42,4 +43,10 @@ pub fn save_app_data(app: AppHandle, payload: PersistedAppData) -> Result<(), St
     // Future windows / tray can subscribe; the current UI already has the latest state.
     let _ = app.emit("app-data-changed", &payload);
     Ok(())
+}
+
+#[tauri::command]
+pub fn minimize_to_tray(app: AppHandle) -> bool {
+    tray::hide_main_window(&app);
+    true
 }

@@ -14,7 +14,7 @@ A interface atual é uma aplicação web (Vite, React e TanStack Start). A integ
 - Exportação e importação de tarefas em JSON
 - Persistência local (as tarefas permanecem ao fechar e reabrir o app)
 
-Recursos nativos como bandeja do sistema, iniciar minimizado, instância única e notificações ao ultrapassar o tempo estimado entram com a integração do Tauri.
+No app desktop (Tauri), a bandeja do sistema e a opção de iniciar minimizado já estão disponíveis. Instância única e notificações nativas ao ultrapassar o tempo estimado entram em PRs seguintes.
 
 ## Desenvolvimento
 
@@ -28,3 +28,10 @@ Também é possível usar `npm install` e `npm run dev`. Para o build de produç
 ```sh
 bun run build
 ```
+
+## Pacotes Linux (bandeja)
+
+O ícone da bandeja usa Ayatana AppIndicator (`libayatana-appindicator3`). A biblioteca é carregada em runtime (não aparece no `ldd` do binário).
+
+- **.deb:** declara a dependência de sistema `libayatana-appindicator3-1` em `bundle.linux.deb.depends`. O CLI do Tauri também acrescenta essa dependência automaticamente quando a feature `tray-icon` está ativa.
+- **AppImage:** com `tray-icon`, o CLI do Tauri v2 copia `libayatana-appindicator3.so.1` para `/usr/lib/` dentro do bundle (`bundle.linux.appimage.files`). Não é necessário ter o pacote instalado no sistema para o ícone funcionar no AppImage; essa cópia é injetada pelo CLI e não precisa ser repetida no `tauri.conf.json`.

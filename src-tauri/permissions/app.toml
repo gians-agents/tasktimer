@@ -12,3 +12,8 @@ commands.allow = ["load_app_data"]
 identifier = "allow-save-app-data"
 description = "Allows saving persisted tasks and settings to the app data directory."
 commands.allow = ["save_app_data"]
+
+[[permission]]
+identifier = "allow-minimize-to-tray"
+description = "Allows hiding the main window to the system tray."
+commands.allow = ["minimize_to_tray"]

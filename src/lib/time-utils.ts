@@ -35,6 +35,20 @@ export function getLiveElapsedSeconds(task: Task, nowMs: number): number {
   return task.elapsedSeconds + deltaSeconds;
 }
 
+/** Detects overtime from wall-clock elapsed time, even if JS timers were throttled. */
+export function findNewlyOvertimeTasks(tasks: Task[], nowMs: number): { tasks: Task[]; newlyOvertime: Task[] } {
+  const newlyOvertime: Task[] = [];
+  const next = tasks.map((task) => {
+    if (!task.isRunning || task.overtimeNotified) return task;
+    if (getLiveElapsedSeconds(task, nowMs) >= task.estimatedMinutes * 60) {
+      newlyOvertime.push(task);
+      return { ...task, overtimeNotified: true };
+    }
+    return task;
+  });
+  return { tasks: next, newlyOvertime };
+}
+
 export function validateTaskDraft(name: string, minutesRaw: string): string | null {
   if (name.trim().length === 0) {
     return "Informe o nome da tarefa.";
