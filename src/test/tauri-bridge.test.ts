@@ -12,7 +12,9 @@ import {
   STORAGE_KEY,
   getAppInfo,
   loadPersistedData,
+  minimizeToTray,
   savePersistedData,
+  setStartMinimizedPreference,
   type AppInfo,
 } from "@/lib/tauri-bridge";
 import type { PersistedAppData } from "@/types/task";
@@ -119,5 +121,44 @@ describe("Tauri persistence adapter", () => {
     expect(invoke).not.toHaveBeenCalledWith("save_app_data", expect.anything());
 
     spy.mockRestore();
+  });
+});
+
+describe("tray and start-minimized stubs", () => {
+  beforeEach(() => {
+    isTauri.mockReturnValue(false);
+    invoke.mockReset();
+  });
+
+  it("minimizeToTray returns false in the browser without calling invoke", async () => {
+    expect(await minimizeToTray()).toBe(false);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("minimizeToTray invokes the hide command inside Tauri and returns true", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockResolvedValue(true);
+    expect(await minimizeToTray()).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("minimize_to_tray");
+  });
+
+  it("minimizeToTray returns false if the Tauri command fails", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockRejectedValue(new Error("no window"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await minimizeToTray()).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("setStartMinimizedPreference returns false in the browser (settings still persist in localStorage)", async () => {
+    expect(await setStartMinimizedPreference(true)).toBe(false);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("setStartMinimizedPreference returns true inside Tauri without a separate command", async () => {
+    isTauri.mockReturnValue(true);
+    expect(await setStartMinimizedPreference(true)).toBe(true);
+    expect(await setStartMinimizedPreference(false)).toBe(true);
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

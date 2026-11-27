@@ -107,11 +107,19 @@ export async function savePersistedData(data: PersistedAppData): Promise<void> {
 // --- Later steps (tray, single-instance, native notifications). Stubs keep the UI working. ---
 
 export async function minimizeToTray(): Promise<boolean> {
-  return false;
+  if (!isTauri()) return false;
+  try {
+    return await invoke<boolean>("minimize_to_tray");
+  } catch (error) {
+    console.error('[TaskTimer] Falha ao invocar comando Tauri "minimize_to_tray":', error);
+    return false;
+  }
 }
 
 export async function setStartMinimizedPreference(_enabled: boolean): Promise<boolean> {
-  return false;
+  // Already persisted on settings.startMinimized via savePersistedData / save_app_data.
+  // The Rust side reads that same file on the next launch.
+  return isTauri();
 }
 
 export async function ensureSingleInstance(): Promise<boolean> {
