@@ -7,6 +7,8 @@ import {
   getLiveElapsedSeconds,
   getProgressPercent,
   getProgressTone,
+  assertImportPayloadSize,
+  MAX_DATA_BYTES,
   parseImportedJson,
   validateTaskDraft,
 } from "@/lib/time-utils";
@@ -105,5 +107,12 @@ describe("overtime detection after a delayed tick", () => {
     const paused = { ...base, isRunning: false, lastStartedAt: null };
     const already = { ...base, overtimeNotified: true };
     expect(findNewlyOvertimeTasks([paused, already], 1_000_000 + 80_000).newlyOvertime).toEqual([]);
+  });
+});
+
+describe("import payload size limit", () => {
+  it("accepts payloads at the limit and rejects anything larger", () => {
+    expect(() => assertImportPayloadSize(MAX_DATA_BYTES)).not.toThrow();
+    expect(() => assertImportPayloadSize(MAX_DATA_BYTES + 1)).toThrow(/excede o limite/);
   });
 });

@@ -22,3 +22,13 @@ commands.allow = ["minimize_to_tray"]
 identifier = "allow-notify-overtime"
 description = "Allows showing a native overtime notification (deduped on the Rust side)."
 commands.allow = ["notify_overtime"]
+
+[[permission]]
+identifier = "allow-export-json"
+description = "Allows opening the native Save dialog and writing the exported JSON to the chosen path."
+commands.allow = ["export_json"]
+
+[[permission]]
+identifier = "allow-import-json"
+description = "Allows opening the native Open dialog and reading a JSON file chosen by the user."
+commands.allow = ["import_json"]

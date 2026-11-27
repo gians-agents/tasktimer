@@ -1,5 +1,6 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::overtime;
 use crate::storage::{self, PersistedAppData};
@@ -71,4 +72,57 @@ pub fn notify_overtime(app: AppHandle, task_id: String) -> bool {
 pub fn minimize_to_tray(app: AppHandle) -> bool {
     tray::hide_main_window(&app);
     true
+}
+
+fn with_parent_dialog(app: &AppHandle) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
+    let mut builder = app.dialog().file();
+    if let Some(window) = app.get_webview_window("main") {
+        builder = builder.set_parent(&window);
+    }
+    builder
+}
+
+fn dialog_path(file: tauri_plugin_dialog::FilePath) -> Result<std::path::PathBuf, String> {
+    file.simplified()
+        .into_path()
+        .map_err(|err| format!("caminho inválido: {err}"))
+}
+
+/// Opens the native Save dialog and writes `contents` to the chosen path.
+/// Returns `Ok(None)` when the user cancels, or `Ok(Some(path))` on success.
+#[tauri::command]
+pub async fn export_json(
+    app: AppHandle,
+    contents: String,
+    default_file_name: String,
+) -> Result<Option<String>, String> {
+    let file_name = storage::sanitize_export_file_name(&default_file_name);
+    let Some(file) = with_parent_dialog(&app)
+        .set_title("Exportar JSON")
+        .add_filter("JSON", &["json"])
+        .set_file_name(&file_name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = dialog_path(file)?;
+    let written = storage::write_export_json(&path, &contents).map_err(|err| err.to_string())?;
+    Ok(Some(written.to_string_lossy().into_owned()))
+}
+
+/// Opens the native Open dialog and reads the chosen JSON file.
+/// Returns `Ok(None)` when the user cancels.
+#[tauri::command]
+pub async fn import_json(app: AppHandle) -> Result<Option<String>, String> {
+    let Some(file) = with_parent_dialog(&app)
+        .set_title("Importar JSON")
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = dialog_path(file)?;
+    storage::read_import_json(&path)
+        .map(Some)
+        .map_err(|err| err.to_string())
 }

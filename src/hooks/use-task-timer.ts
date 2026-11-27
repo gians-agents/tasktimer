@@ -7,14 +7,18 @@ import {
   getAppInfo,
   isTauri,
   loadPersistedData,
+  defaultExportFileName,
   minimizeToTray,
+  pickImportedJson,
   requestNotificationPermission,
+  saveExportedJson,
   savePersistedData,
   sendOvertimeNotification,
   setStartMinimizedPreference,
   type AppInfo,
 } from "@/lib/tauri-bridge";
 import {
+  assertImportPayloadSize,
   findNewlyOvertimeTasks,
   getLiveElapsedSeconds,
   parseImportedJson,
@@ -37,7 +41,9 @@ export function useTaskTimer() {
   const overtimeToastedRef = useRef(new Set<string>());
 
   const pruneOvertimeToasts = (nextTasks: Task[]) => {
-    const flagged = new Set(nextTasks.filter((task) => task.overtimeNotified).map((task) => task.id));
+    const flagged = new Set(
+      nextTasks.filter((task) => task.overtimeNotified).map((task) => task.id),
+    );
     for (const id of overtimeToastedRef.current) {
       if (!flagged.has(id)) overtimeToastedRef.current.delete(id);
     }
@@ -50,7 +56,6 @@ export function useTaskTimer() {
       description: `"${taskName}" passou de ${estimatedMinutes} min.`,
     });
   };
-
 
   tasksRef.current = tasks;
   settingsRef.current = settings;
@@ -82,7 +87,8 @@ export function useTaskTimer() {
         persistBlockedRef.current = true;
         setStorageError(loaded.message);
         toast.error("Não foi possível carregar as tarefas salvas", {
-          description: "O arquivo local não foi alterado. Feche o app e tente novamente, ou restaure um backup.",
+          description:
+            "O arquivo local não foi alterado. Feche o app e tente novamente, ou restaure um backup.",
         });
       }
       if (info) setAppInfo(info);
@@ -173,9 +179,16 @@ export function useTaskTimer() {
     let unlisten: (() => void) | undefined;
     void import("@tauri-apps/api/event")
       .then(({ listen }) =>
-        listen<{ id: string; name: string; estimatedMinutes: number }>("overtime-detected", (event) => {
-          markOvertimeAndToast(event.payload.id, event.payload.name, event.payload.estimatedMinutes);
-        }),
+        listen<{ id: string; name: string; estimatedMinutes: number }>(
+          "overtime-detected",
+          (event) => {
+            markOvertimeAndToast(
+              event.payload.id,
+              event.payload.name,
+              event.payload.estimatedMinutes,
+            );
+          },
+        ),
       )
       .then((fn) => {
         if (cancelled) fn();
@@ -319,7 +332,13 @@ export function useTaskTimer() {
     }
   }, []);
 
-  const exportJson = useCallback(() => {
+  const exportJson = useCallback(async () => {
+    if (persistBlockedRef.current) {
+      toast.error("Não foi possível exportar", {
+        description: "O arquivo de dados do app não pôde ser carregado.",
+      });
+      return;
+    }
     const now = Date.now();
     const snapshotTasks = tasksRef.current.map((task) => ({
       ...task,
@@ -330,20 +349,43 @@ export function useTaskTimer() {
       tasks: snapshotTasks,
       settings: settingsRef.current,
     });
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `tasktimer-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    toast.success("Tarefas exportadas em JSON");
+    const fileName = defaultExportFileName();
+    try {
+      const result = await saveExportedJson(json, fileName);
+      if (result.status === "cancelled") return;
+      if (result.status === "saved") {
+        toast.success("Tarefas exportadas em JSON", { description: result.path });
+        return;
+      }
+      toast.success("Tarefas exportadas em JSON");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao exportar JSON.";
+      toast.error(message);
+    }
   }, []);
 
   const importJson = useCallback(
-    async (file: File) => {
+    async (file?: File) => {
       try {
-        const text = await file.text();
+        if (persistBlockedRef.current) {
+          toast.error("Não foi possível importar", {
+            description:
+              "O arquivo de dados do app não pôde ser carregado. A importação não foi gravada.",
+          });
+          return;
+        }
+        let text: string;
+        if (isTauri() && !file) {
+          const picked = await pickImportedJson();
+          if (picked === null) return;
+          text = picked;
+        } else if (file) {
+          assertImportPayloadSize(file.size);
+          text = await file.text();
+        } else {
+          return;
+        }
+        assertImportPayloadSize(new TextEncoder().encode(text).length);
         const imported = parseImportedJson(text);
         const nextSettings: AppSettings =
           imported.startMinimized !== undefined
