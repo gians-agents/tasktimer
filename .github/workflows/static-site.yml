@@ -18,14 +18,15 @@ on:
       - ".github/scripts/validate-site.py"
   workflow_dispatch:
 
+# Job-level blocks grant pages/id-token only where deploy needs them.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
-  # Do not cancel an in-progress production deploy; cancel superseded PR checks.
+  # Isolate production (refs/heads/main) from PR checks so a new PR run
+  # cannot cancel an in-progress deploy. Cancel only superseded checks
+  # on the same PR ref.
+  group: pages-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
