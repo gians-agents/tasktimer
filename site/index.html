@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="TaskTimer é um aplicativo desktop para acompanhar o tempo gasto em cada tarefa, com progresso visual, histórico e persistência local."
+    />
+    <meta name="theme-color" content="#0D6E78" />
+    <title>TaskTimer</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="./icon-256.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./">
+        <img src="./icon.svg" width="36" height="36" alt="" />
+        <span>TaskTimer</span>
+      </a>
+      <nav aria-label="Seções da página">
+        <a href="#download">Download</a>
+        <a href="#hashes">Hashes</a>
+        <a href="https://github.com/gians-agents/tasktimer">Código</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <img class="hero-icon" src="./icon.svg" width="112" height="112" alt="Ícone do TaskTimer: um cronômetro dourado em fundo verde-azulado" />
+        <h1>TaskTimer</h1>
+        <p class="lede">
+          Um timer de tarefas para o desktop. Acompanhe o tempo de cada atividade,
+          veja o progresso em relação à estimativa e mantenha o histórico — com
+          os dados salvos no seu computador.
+        </p>
+        <p class="release-status" id="release-status">
+          Os instaladores serão publicados no primeiro GitHub Release. Enquanto isso,
+          os botões levam à página de releases.
+        </p>
+        <p class="hero-actions">
+          <a class="btn btn-gold" href="#download">Baixar o app</a>
+          <a class="btn btn-ghost" href="https://github.com/gians-agents/tasktimer">Ver o repositório</a>
+        </p>
+      </section>
+
+      <section id="download" class="section">
+        <h2>Download</h2>
+        <p class="section-intro">
+          Instale no Windows ou no Linux. Prefira sempre o arquivo do
+          <a href="https://github.com/gians-agents/tasktimer/releases">release mais recente</a>
+          e confira o SHA256 na seção de hashes.
+        </p>
+
+        <div class="download-grid">
+          <article class="os-card">
+            <h3>Windows</h3>
+            <ul>
+              <li>
+                <a
+                  class="btn btn-teal download-link"
+                  id="dl-windows-exe"
+                  data-kind="windows-exe"
+                  href="https://github.com/gians-agents/tasktimer/releases"
+                >
+                  Instalador NSIS (.exe)
+                </a>
+              </li>
+              <li>
+                <a
+                  class="btn btn-teal download-link"
+                  id="dl-windows-msi"
+                  data-kind="windows-msi"
+                  href="https://github.com/gians-agents/tasktimer/releases"
+                >
+                  Instalador MSI (.msi)
+                </a>
+              </li>
+            </ul>
+          </article>
+
+          <article class="os-card">
+            <h3>Linux</h3>
+            <ul>
+              <li>
+                <a
+                  class="btn btn-teal download-link"
+                  id="dl-linux-appimage"
+                  data-kind="linux-appimage"
+                  href="https://github.com/gians-agents/tasktimer/releases"
+                >
+                  AppImage (.AppImage)
+                </a>
+              </li>
+              <li>
+                <a
+                  class="btn btn-teal download-link"
+                  id="dl-linux-deb"
+                  data-kind="linux-deb"
+                  href="https://github.com/gians-agents/tasktimer/releases"
+                >
+                  Pacote Debian (.deb)
+                </a>
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <p class="releases-fallback">
+          <a href="https://github.com/gians-agents/tasktimer/releases">Ver todos os arquivos no GitHub Releases</a>
+        </p>
+      </section>
+
+      <section id="preview" class="section">
+        <h2>Interface</h2>
+        <figure class="preview-figure">
+          <div class="app-window" role="img" aria-label="Prévia ilustrativa da interface do TaskTimer, com lista de tarefas e barras de progresso">
+            <div class="app-window-bar">
+              <span class="dots" aria-hidden="true"></span>
+              <span class="app-window-title">TaskTimer</span>
+            </div>
+            <div class="app-window-body">
+              <div class="mock-card">
+                <div class="mock-card-head">
+                  <strong>Revisar o relatório</strong>
+                  <span class="mock-time">00:24:10 / 00:45:00</span>
+                </div>
+                <div class="mock-bar"><span class="mock-bar-fill-54"></span></div>
+              </div>
+              <div class="mock-card mock-card-over">
+                <div class="mock-card-head">
+                  <strong>Preparar a apresentação</strong>
+                  <span class="mock-time">01:12:04 / 01:00:00</span>
+                </div>
+                <div class="mock-bar"><span class="mock-bar-fill-100"></span></div>
+              </div>
+              <div class="mock-card mock-card-paused">
+                <div class="mock-card-head">
+                  <strong>Organizar a caixa de entrada</strong>
+                  <span class="mock-time">00:08:22 / 00:20:00</span>
+                </div>
+                <div class="mock-bar"><span class="mock-bar-fill-42"></span></div>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            Prévia ilustrativa da interface (placeholder). Uma captura de tela real do app será publicada em breve.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="hashes" class="section">
+        <h2>Verificação de integridade (SHA256)</h2>
+        <p class="section-intro">
+          Depois de baixar, compare o hash do arquivo com a lista oficial do release.
+          Assim você confirma que o instalador não foi alterado no caminho.
+        </p>
+
+        <div class="hash-panel">
+          <p id="hash-fallback">Hashes disponíveis após o primeiro release</p>
+          <pre id="hash-contents" hidden></pre>
+          <p id="hash-link-wrap" hidden>
+            <a id="hash-file-link" href="https://github.com/gians-agents/tasktimer/releases">Abrir SHA256SUMS no GitHub Releases</a>
+          </p>
+        </div>
+
+        <h3>Como verificar</h3>
+        <div class="verify-grid">
+          <article>
+            <h4>Linux ou macOS</h4>
+            <p>No diretório do arquivo baixado, com o manifesto <code>SHA256SUMS</code>:</p>
+            <pre><code>sha256sum -c SHA256SUMS</code></pre>
+            <p>Ou calcule o hash de um arquivo específico e compare com a lista:</p>
+            <pre><code>sha256sum TaskTimer_0.1.0_amd64.AppImage</code></pre>
+          </article>
+          <article>
+            <h4>Windows (PowerShell)</h4>
+            <p>Calcule o SHA256 e compare o resultado com o valor publicado:</p>
+            <pre><code>Get-FileHash -Algorithm SHA256 .\TaskTimer_0.1.0_x64-setup.exe</code></pre>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        TaskTimer ·
+        <a href="https://github.com/gians-agents/tasktimer">código no GitHub</a>
+        · os downloads apontam para
+        <a href="https://github.com/gians-agents/tasktimer/releases">GitHub Releases</a>
+      </p>
+    </footer>
+
+    <script type="module" src="./script.js"></script>
+  </body>
+</html>
