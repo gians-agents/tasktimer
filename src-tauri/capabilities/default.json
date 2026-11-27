@@ -11,6 +11,9 @@
     "allow-get-app-info",
     "allow-load-app-data",
     "allow-save-app-data",
-    "allow-minimize-to-tray"
+    "allow-minimize-to-tray",
+    "allow-notify-overtime",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission"
   ]
 }

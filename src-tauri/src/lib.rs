@@ -1,4 +1,5 @@
 mod commands;
+mod overtime;
 mod storage;
 mod tray;
 
@@ -16,8 +17,10 @@ pub fn run() {
     }
 
     builder
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             tray::setup(app)?;
+            overtime::setup(app)?;
             Ok(())
         })
         .on_window_event(tray::on_window_event)
@@ -25,7 +28,8 @@ pub fn run() {
             commands::get_app_info,
             commands::load_app_data,
             commands::save_app_data,
-            commands::minimize_to_tray
+            commands::minimize_to_tray,
+            commands::notify_overtime
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

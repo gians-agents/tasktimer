@@ -14,9 +14,23 @@ A interface atual é uma aplicação web (Vite, React e TanStack Start). A integ
 - Exportação e importação de tarefas em JSON
 - Persistência local (as tarefas permanecem ao fechar e reabrir o app)
 
-No app desktop (Tauri), a bandeja do sistema, a opção de iniciar minimizado e a instância única já estão disponíveis. Notificações nativas ao ultrapassar o tempo estimado entram em PRs seguintes.
+No app desktop (Tauri), a bandeja do sistema, a opção de iniciar minimizado, a instância única e as notificações nativas ao ultrapassar o tempo estimado já estão disponíveis.
 
 Uma segunda execução do TaskTimer não abre outra janela: o processo novo encerra e o já em execução mostra, desminimiza e foca a janela principal — mesmo se ela estiver oculta na bandeja ou se a preferência “iniciar minimizado” estiver ativa (essa preferência vale só na primeira abertura do processo).
+
+## Notificações nativas (overtime)
+
+Quando uma tarefa em execução ultrapassa o tempo estimado, o app desktop envia uma notificação do sistema — inclusive se a janela estiver oculta na bandeja ou sem foco. Há no máximo **uma notificação por travessia** do limite (`overtimeNotified` + deduplicação no Rust).
+
+O tempo é medido em relógio de parede (`lastStartedAt`). O webview pode ter o `setInterval` restringido ou pausado com a janela oculta, então um watchdog no processo Rust revisa as tarefas em execução a cada segundo (a partir do último `save_app_data`) e dispara a notificação mesmo se o JavaScript estiver congelado. Quando o webview volta, ele só sincroniza a flag e o toast — não manda uma segunda notificação nativa.
+
+Clicar na notificação tenta mostrar, desminimizar e focar a janela principal. No Windows o clique só é reportado enquanto o toast está visível, não depois de ir para a Central de Ações. No Linux depende do servidor de notificações.
+
+**Linux:** é preciso um daemon de notificações no ambiente (por exemplo o da GNOME, KDE, `xfce4-notifyd` ou Dunst). Sem ele a notificação não aparece; o toast da interface continua valendo quando a janela está visível.
+
+**Windows:** em builds de desenvolvimento/não assinadas o plugin pode exibir o nome e o ícone do PowerShell. A identidade do TaskTimer vale nos pacotes instalados (`Only works for installed apps` na documentação do plugin).
+
+A exportação nativa em “Salvar como” entra em um PR seguinte.
 
 ## Desenvolvimento
 

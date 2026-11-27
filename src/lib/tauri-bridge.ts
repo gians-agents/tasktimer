@@ -104,7 +104,7 @@ export async function savePersistedData(data: PersistedAppData): Promise<void> {
   writeLocalStorage(data);
 }
 
-// --- Later steps (native notifications). Stubs keep the UI working. ---
+// --- Tray, single-instance and native notifications. ---
 
 export async function minimizeToTray(): Promise<boolean> {
   if (!isTauri()) return false;
@@ -135,12 +135,64 @@ export async function ensureSingleInstance(): Promise<boolean> {
   return true;
 }
 
+export type OvertimeNotificationChannel = "tauri" | "browser" | "toast-only" | "already";
+
+/**
+ * Asks for notification permission (no-op grant on desktop Tauri; a prompt
+ * in the browser or on mobile). Returns whether we may show a system notification.
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (isTauri()) {
+    try {
+      const { isPermissionGranted, requestPermission } = await import(
+        "@tauri-apps/plugin-notification"
+      );
+      if (await isPermissionGranted()) return true;
+      return (await requestPermission()) === "granted";
+    } catch (error) {
+      console.error("[TaskTimer] Falha ao verificar permissão de notificação:", error);
+      return false;
+    }
+  }
+
+  if (typeof window !== "undefined" && "Notification" in window) {
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const permission = await Notification.requestPermission().catch(() => "denied");
+    return permission === "granted";
+  }
+
+  return false;
+}
+
+/**
+ * Shows the overtime alert. In Tauri this goes through `notify_overtime`,
+ * which uses `tauri-plugin-notification` and dedupes per task crossing.
+ * The browser keeps the Notification API. If permission is denied or the
+ * plugin is unavailable, the caller should fall back to a toast.
+ */
 export async function sendOvertimeNotification(
   taskName: string,
   estimatedMinutes: number,
-): Promise<"tauri" | "browser" | "toast-only"> {
+  taskId?: string,
+): Promise<OvertimeNotificationChannel> {
   const title = "Tempo estimado ultrapassado";
   const body = `"${taskName}" passou de ${estimatedMinutes} min estimados.`;
+
+  if (isTauri()) {
+    try {
+      if (!(await requestNotificationPermission())) return "toast-only";
+      const sent = await invoke<boolean>("notify_overtime", {
+        taskId: taskId ?? "",
+        taskName,
+        estimatedMinutes,
+      });
+      return sent ? "tauri" : "already";
+    } catch (error) {
+      console.error('[TaskTimer] Falha ao invocar comando Tauri "notify_overtime":', error);
+      return "toast-only";
+    }
+  }
 
   if (typeof window !== "undefined" && "Notification" in window) {
     if (Notification.permission === "granted") {

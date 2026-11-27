@@ -1,11 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isTauri = vi.fn(() => false);
 const invoke = vi.fn();
+const isPermissionGranted = vi.fn(async () => false);
+const requestPermission = vi.fn(async () => "denied" as const);
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => isTauri(),
   invoke: (...args: unknown[]) => invoke(...args),
+}));
+
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted: () => isPermissionGranted(),
+  requestPermission: () => requestPermission(),
 }));
 
 import {
@@ -15,6 +22,8 @@ import {
   minimizeToTray,
   savePersistedData,
   ensureSingleInstance,
+  requestNotificationPermission,
+  sendOvertimeNotification,
   setStartMinimizedPreference,
   type AppInfo,
 } from "@/lib/tauri-bridge";
@@ -179,5 +188,96 @@ describe("single-instance stub", () => {
     isTauri.mockReturnValue(true);
     expect(await ensureSingleInstance()).toBe(true);
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("native overtime notifications", () => {
+  const originalNotification = globalThis.Notification;
+
+  beforeEach(() => {
+    isTauri.mockReturnValue(false);
+    invoke.mockReset();
+    isPermissionGranted.mockReset();
+    requestPermission.mockReset();
+    isPermissionGranted.mockResolvedValue(false);
+    requestPermission.mockResolvedValue("denied");
+  });
+
+  afterEach(() => {
+    if (originalNotification) {
+      Object.defineProperty(globalThis, "Notification", {
+        configurable: true,
+        value: originalNotification,
+      });
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (globalThis as { Notification?: unknown }).Notification;
+    }
+  });
+
+  it("uses the browser Notification API when permission is already granted", async () => {
+    const ctor = vi.fn();
+    Object.defineProperty(globalThis, "Notification", {
+      configurable: true,
+      value: Object.assign(ctor, { permission: "granted", requestPermission: vi.fn() }),
+    });
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("browser");
+    expect(ctor).toHaveBeenCalledWith("Tempo estimado ultrapassado", {
+      body: '"Revisar PR" passou de 45 min estimados.',
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("falls back to toast-only when the browser permission is denied", async () => {
+    Object.defineProperty(globalThis, "Notification", {
+      configurable: true,
+      value: Object.assign(vi.fn(), { permission: "denied", requestPermission: vi.fn() }),
+    });
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("toast-only");
+  });
+
+  it("requests plugin permission and invokes notify_overtime inside Tauri", async () => {
+    isTauri.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(false);
+    requestPermission.mockResolvedValue("granted");
+    invoke.mockResolvedValue(true);
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("tauri");
+    expect(requestPermission).toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("notify_overtime", {
+      taskId: "t-1",
+      taskName: "Revisar PR",
+      estimatedMinutes: 45,
+    });
+  });
+
+  it("returns already when the Rust side has already notified this crossing", async () => {
+    isTauri.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(true);
+    invoke.mockResolvedValue(false);
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("already");
+  });
+
+  it("falls back to toast-only if Tauri permission is denied", async () => {
+    isTauri.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(false);
+    requestPermission.mockResolvedValue("denied");
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("toast-only");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("falls back to toast-only if the Tauri command fails", async () => {
+    isTauri.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(true);
+    invoke.mockRejectedValue(new Error("plugin missing"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await sendOvertimeNotification("Revisar PR", 45, "t-1")).toBe("toast-only");
+    spy.mockRestore();
+  });
+
+  it("requestNotificationPermission returns true when the plugin already granted it", async () => {
+    isTauri.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(true);
+    expect(await requestNotificationPermission()).toBe(true);
+    expect(requestPermission).not.toHaveBeenCalled();
   });
 });
