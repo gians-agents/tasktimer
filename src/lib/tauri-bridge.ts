@@ -212,9 +212,7 @@ export async function sendOvertimeNotification(
 }
 
 export type SaveExportResult =
-  | { status: "cancelled" }
-  | { status: "saved"; path: string }
-  | { status: "browser" };
+  { status: "cancelled" } | { status: "saved"; path: string } | { status: "browser" };
 
 /** Default Save-As filename, using the local calendar date. */
 export function defaultExportFileName(now = new Date()): string {

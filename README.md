@@ -38,7 +38,6 @@ No app desktop, **Exportar JSON** abre o diálogo nativo “Salvar como”, com 
 
 No navegador, a exportação segue o download por âncora e a importação usa o seletor de arquivo da página.
 
-
 ## Desenvolvimento
 
 ```sh
