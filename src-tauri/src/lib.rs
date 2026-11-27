@@ -4,7 +4,18 @@ mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // The single-instance plugin must be registered first so a second
+    // process is detected before tray setup (or any later plugin) runs.
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window_from_second_instance(app);
+        }));
+    }
+
+    builder
         .setup(|app| {
             tray::setup(app)?;
             Ok(())

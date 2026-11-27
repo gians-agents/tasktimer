@@ -104,7 +104,7 @@ export async function savePersistedData(data: PersistedAppData): Promise<void> {
   writeLocalStorage(data);
 }
 
-// --- Later steps (tray, single-instance, native notifications). Stubs keep the UI working. ---
+// --- Later steps (native notifications). Stubs keep the UI working. ---
 
 export async function minimizeToTray(): Promise<boolean> {
   if (!isTauri()) return false;
@@ -122,6 +122,15 @@ export async function setStartMinimizedPreference(_enabled: boolean): Promise<bo
   return isTauri();
 }
 
+/**
+ * Single-instance is enforced in Rust by `tauri-plugin-single-instance`
+ * before the webview starts. A second process exits immediately after
+ * asking the first one to show, unminimize and focus the window (even
+ * if it was hidden in the tray or started minimized).
+ *
+ * This frontend helper is a documented no-op: if this JS is running,
+ * we are already the surviving instance (or a browser tab).
+ */
 export async function ensureSingleInstance(): Promise<boolean> {
   return true;
 }

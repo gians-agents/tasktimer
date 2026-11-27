@@ -44,6 +44,25 @@ pub fn show_main_window(app: &AppHandle) {
     }
 }
 
+/// A second process launch always reveals the existing window — even if
+/// `start_minimized` is enabled or the window is hidden in the tray.
+/// That preference only applies to the first process start.
+pub fn should_show_main_window_on_second_instance(_start_minimized: bool) -> bool {
+    true
+}
+
+/// Focus helper used by `tauri-plugin-single-instance`.
+/// Always unminimizes, shows and focuses the main window, even when
+/// `start_minimized` is set (that preference applies only at first start).
+pub fn show_main_window_from_second_instance(app: &AppHandle) {
+    let start_minimized = data_file_path(app)
+        .map(|path| read_start_minimized(&path))
+        .unwrap_or(false);
+    if should_show_main_window_on_second_instance(start_minimized) {
+        show_main_window(app);
+    }
+}
+
 pub fn toggle_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let visible = window.is_visible().unwrap_or(false);
@@ -174,6 +193,12 @@ mod tests {
     fn shows_window_by_default_and_hides_when_preference_is_set() {
         assert!(should_show_main_window_at_startup(false));
         assert!(!should_show_main_window_at_startup(true));
+    }
+
+    #[test]
+    fn second_instance_always_shows_window_even_if_start_minimized() {
+        assert!(should_show_main_window_on_second_instance(false));
+        assert!(should_show_main_window_on_second_instance(true));
     }
 
     #[test]
