@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const isTauri = vi.fn(() => false);
 const invoke = vi.fn();
 const isPermissionGranted = vi.fn(async () => false);
-const requestPermission = vi.fn(async () => "denied" as const);
+const requestPermission = vi.fn(async (): Promise<"denied" | "granted" | "default"> => "denied");
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => isTauri(),
@@ -210,7 +210,6 @@ describe("native overtime notifications", () => {
         value: originalNotification,
       });
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete (globalThis as { Notification?: unknown }).Notification;
     }
   });

@@ -45,6 +45,25 @@ Também é possível usar `npm install` e `npm run dev`. Para o build de produç
 bun run build
 ```
 
+## Lint e verificação de tipos
+
+No frontend:
+
+```sh
+bun run lint
+bun run typecheck
+bun run format:check
+```
+
+Para reescrever a formatação automaticamente: `bun run format`.
+
+No crate Rust (`src-tauri`):
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+```
+
 ## Pacotes Linux (bandeja)
 
 O ícone da bandeja usa Ayatana AppIndicator (`libayatana-appindicator3`). A biblioteca é carregada em runtime (não aparece no `ldd` do binário).

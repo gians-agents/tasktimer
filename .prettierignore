@@ -6,3 +6,7 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+
+# Rust crate and build artifacts (not Prettier's job; target/ is huge locally)
+src-tauri
+bunfig.toml
