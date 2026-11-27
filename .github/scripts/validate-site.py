@@ -21,6 +21,19 @@ REQUIRED_FILES = [
     "github-download-url.js",
     "icon.svg",
     "favicon.ico",
+    "fonts/OFL.txt",
+    "fonts/ibm-plex-sans-latin-400.woff2",
+    "fonts/ibm-plex-sans-latin-500.woff2",
+    "fonts/ibm-plex-sans-latin-600.woff2",
+    "fonts/ibm-plex-sans-latin-700.woff2",
+    "fonts/ibm-plex-sans-latin-ext-400.woff2",
+    "fonts/ibm-plex-sans-latin-ext-500.woff2",
+    "fonts/ibm-plex-sans-latin-ext-600.woff2",
+    "fonts/ibm-plex-sans-latin-ext-700.woff2",
+    "fonts/ibm-plex-mono-latin-400.woff2",
+    "fonts/ibm-plex-mono-latin-500.woff2",
+    "fonts/ibm-plex-mono-latin-ext-400.woff2",
+    "fonts/ibm-plex-mono-latin-ext-500.woff2",
 ]
 REQUIRED_PHRASE = "Hashes disponíveis após o primeiro release"
 REQUIRED_COMMANDS = ("sha256sum", "Get-FileHash")
@@ -102,6 +115,7 @@ def fail(errors: list[str]) -> None:
 
 DOWNLOAD_URL_CASES: list[tuple[object, bool]] = [
     ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/TaskTimer_0.1.0_x64-setup.exe", True),
+    ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0-alpha/SHA256SUMS", True),
     ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/SHA256SUMS", True),
     ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/TaskTimer_0.1.0_amd64.AppImage", True),
     ("http://github.com/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
@@ -167,6 +181,35 @@ console.log("isAllowedGitHubDownloadUrl: " + cases.length + " cases passed");
         message = result.stdout.strip()
         if message:
             print(message)
+    return errors
+
+
+
+def run_embed_allowlist_tests() -> list[str]:
+    errors: list[str] = []
+    script_path = ROOT / ".github" / "scripts" / "embed-release.py"
+    if not script_path.is_file():
+        return ["missing .github/scripts/embed-release.py"]
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("embed_release", script_path)
+    if spec is None or spec.loader is None:
+        return ["could not load embed-release.py"]
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    fn = getattr(module, "is_allowed_github_download_url", None)
+    if not callable(fn):
+        return ["embed-release.py must export is_allowed_github_download_url"]
+    failed = 0
+    for value, expected in DOWNLOAD_URL_CASES:
+        actual = fn(value)
+        if actual is not expected:
+            errors.append(
+                f"embed-release allowlist: {value!r} expected {expected} got {actual}"
+            )
+            failed += 1
+    if not failed:
+        print(f"embed-release is_allowed_github_download_url: {len(DOWNLOAD_URL_CASES)} cases passed")
     return errors
 
 
@@ -249,8 +292,16 @@ def main() -> None:
         errors.append("page must define #download and #hashes sections")
 
     script = (SITE / "script.js").read_text(encoding="utf-8") if (SITE / "script.js").is_file() else ""
-    if "releases/latest" not in script and "releases/latest" not in html_text:
-        errors.append("site should reference GitHub Releases latest URLs")
+    if "/releases?per_page=" not in script and "/repos/" not in script:
+        errors.append("script.js must list GitHub releases (not /releases/latest, which skips prereleases)")
+    if "releases/latest" in script:
+        errors.append("script.js must not use /releases/latest (it ignores drafts and prereleases)")
+    if "./release.json" not in script:
+        errors.append("script.js must load the embedded site/release.json first")
+    if "pickFirstPublishedRelease" not in script:
+        errors.append("script.js must pick the first non-draft release (prereleases allowed)")
+    if "pré-release" not in script and "pré-release" not in html_text:
+        errors.append("site must label prereleases as pré-release")
     if "setDownloadLinks(RELEASES_PAGE)" not in script:
         errors.append("script.js must point download buttons at the releases page when the API fails")
     if 'from "./github-download-url.js"' not in script:
@@ -262,7 +313,29 @@ def main() -> None:
     if REQUIRED_PHRASE not in script and REQUIRED_PHRASE not in html_text:
         errors.append("script/html must keep the hash fallback text")
 
+    if "Content-Security-Policy" not in html_text:
+        errors.append("index.html must declare a Content-Security-Policy meta tag")
+    csp_needles = (
+        "default-src 'self'",
+        "style-src 'self'",
+        "font-src 'self'",
+        "img-src 'self' data:",
+        "connect-src",
+        "api.github.com",
+        "github.com",
+        "release-assets.githubusercontent.com",
+    )
+    for needle in csp_needles:
+        if needle not in html_text:
+            errors.append(f"CSP is missing {needle!r}")
+    for host in ("fonts.googleapis.com", "fonts.gstatic.com"):
+        if host in html_text:
+            errors.append(f"index.html should not load fonts from {host} (fonts are self-hosted)")
+    if "@font-face" not in (SITE / "styles.css").read_text(encoding="utf-8"):
+        errors.append("styles.css must declare @font-face rules for self-hosted IBM Plex")
+
     errors.extend(run_download_url_tests())
+    errors.extend(run_embed_allowlist_tests())
 
     if errors:
         fail(errors)

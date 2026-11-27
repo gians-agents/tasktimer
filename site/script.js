@@ -2,7 +2,7 @@ import { isAllowedGitHubDownloadUrl } from "./github-download-url.js";
 
 const REPO = "gians-agents/tasktimer";
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
-const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+const RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 
 const KIND_MATCHERS = {
   "windows-exe": (name) => name.toLowerCase().endsWith("-setup.exe"),
@@ -28,6 +28,17 @@ function pickChecksumAsset(assets) {
     assets.find((asset) => asset.name === "SHA256SUMS") ||
     assets.find((asset) => /^SHA256SUMS$/i.test(asset.name))
   );
+}
+
+export function pickFirstPublishedRelease(releases) {
+  if (!Array.isArray(releases)) {
+    return null;
+  }
+  return releases.find((release) => release && release.draft === false) || null;
+}
+
+export function isUsableRelease(release) {
+  return Boolean(release && release.tag_name && release.draft !== true);
 }
 
 function setText(id, text) {
@@ -85,34 +96,31 @@ function renderHashes({ text, fileUrl, releaseUrl }) {
   }
 }
 
-async function loadLatestRelease() {
+function renderStatus(release) {
   const status = document.getElementById("release-status");
-  const links = Array.from(document.querySelectorAll(".download-link"));
-
-  let release;
-  try {
-    const response = await fetch(LATEST_API, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    release = await response.json();
-  } catch {
-    // Sem release (404), rede ou rate limit: não deixar o clique em 404 de /download/.
-    setDownloadLinks(RELEASES_PAGE);
-    renderHashes({});
-    return;
-  }
-
+  const badge = document.getElementById("release-badge");
   const tag = release.tag_name || "";
-  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const name = release.name && release.name !== tag ? ` (${release.name})` : "";
   if (status) {
-    status.textContent = tag
-      ? `Release mais recente: ${tag}${release.name ? ` (${release.name})` : ""}.`
+    // Keep the badge as a sibling; set only the leading text node.
+    const label = tag
+      ? `Release mais recente: ${tag}${name}.`
       : "Release mais recente encontrado no GitHub.";
+    const first = status.firstChild;
+    if (first && first.nodeType === Node.TEXT_NODE) {
+      first.textContent = `${label} `;
+    } else {
+      status.insertBefore(document.createTextNode(`${label} `), status.firstChild);
+    }
   }
+  show(badge, Boolean(release.prerelease));
+}
 
+async function applyRelease(release) {
+  renderStatus(release);
+
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const links = Array.from(document.querySelectorAll(".download-link"));
   for (const link of links) {
     const asset = pickAsset(assets, link.dataset.kind);
     const safeUrl = isAllowedGitHubDownloadUrl(asset?.browser_download_url)
@@ -121,13 +129,29 @@ async function loadLatestRelease() {
     link.href = safeUrl || RELEASES_PAGE;
   }
 
+  const tag = release.tag_name || "";
   const sumsAsset = pickChecksumAsset(assets);
   const constructedSums = tag
     ? `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/SHA256SUMS`
     : null;
-  const sumsUrl = [sumsAsset?.browser_download_url, constructedSums].find(
-    isAllowedGitHubDownloadUrl,
-  );
+  const sumsUrl = [
+    release.sha256sums_url,
+    sumsAsset?.browser_download_url,
+    constructedSums,
+  ].find(isAllowedGitHubDownloadUrl);
+  const releasePage =
+    typeof release.html_url === "string" && release.html_url.startsWith(RELEASES_PAGE)
+      ? release.html_url
+      : RELEASES_PAGE;
+
+  const embeddedSums =
+    typeof release.sha256sums === "string" && release.sha256sums.trim()
+      ? release.sha256sums.trim()
+      : null;
+  if (embeddedSums) {
+    renderHashes({ text: embeddedSums, fileUrl: sumsUrl, releaseUrl: releasePage });
+    return;
+  }
 
   if (!sumsUrl) {
     renderHashes({ releaseUrl: RELEASES_PAGE });
@@ -146,4 +170,54 @@ async function loadLatestRelease() {
   }
 }
 
-loadLatestRelease();
+async function loadEmbeddedRelease() {
+  const url = new URL("./release.json", import.meta.url);
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    return null;
+  }
+  const data = await response.json();
+  return isUsableRelease(data) ? data : null;
+}
+
+async function loadReleaseFromApi() {
+  const response = await fetch(RELEASES_API, {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return pickFirstPublishedRelease(await response.json());
+}
+
+export async function loadRelease() {
+  try {
+    const embedded = await loadEmbeddedRelease();
+    if (embedded) {
+      await applyRelease(embedded);
+      return "embedded";
+    }
+  } catch {
+    // Arquivo ausente ou inválido: tenta a API.
+  }
+
+  try {
+    const api = await loadReleaseFromApi();
+    if (api) {
+      await applyRelease(api);
+      return "api";
+    }
+  } catch {
+    // Sem release publicado, rede ou rate limit: não deixar o clique em 404 de /download/.
+  }
+
+  setDownloadLinks(RELEASES_PAGE);
+  renderHashes({});
+  const badge = document.getElementById("release-badge");
+  show(badge, false);
+  return "fallback";
+}
+
+if (typeof document !== "undefined") {
+  loadRelease();
+}
