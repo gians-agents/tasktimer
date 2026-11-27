@@ -136,44 +136,80 @@ pub fn apply_notified_flags(tasks: &mut [Task], notified_ids: &HashSet<String>) 
     changed
 }
 
-/// Merges in-memory claims onto a frontend payload so a stale `save_app_data`
-/// cannot clear a flag the watchdog already raised.
-pub fn merge_notified_into(app: &AppHandle, tasks: &mut [Task]) {
+/// Same order as `save_app_data`: sync the watch from the payload first
+/// (so raising the estimate can forget a previous claim), then apply
+/// remaining claims onto a stale payload.
+pub fn sync_then_merge_flags(watch: &mut OvertimeWatch, tasks: &mut [Task], now_ms: i64) {
+    watch.sync_from_data(tasks, now_ms);
+    if apply_notified_flags(tasks, &watch.notified_ids) {
+        watch.sync_from_data(tasks, now_ms);
+    }
+}
+
+/// Syncs then merges claimed flags onto a frontend payload. Must be called
+/// while holding the data-file lock, before writing the file.
+pub fn sync_and_merge_for_save(app: &AppHandle, tasks: &mut [Task]) {
     if let Some(watch) = app.try_state::<Mutex<OvertimeWatch>>() {
-        if let Ok(guard) = watch.lock() {
-            apply_notified_flags(tasks, &guard.notified_ids);
+        if let Ok(mut guard) = watch.lock() {
+            sync_then_merge_flags(&mut guard, tasks, now_ms());
         }
     }
 }
 
-/// Loads the data file, sets claimed overtime flags, and writes it back atomically.
+/// Loads the data file, sets claimed overtime flags, and writes it back.
+/// Holds the shared data-file lock for the whole read-modify-write.
 /// Returns `true` when the file was updated.
 pub fn persist_flags_to_path(path: &std::path::Path, notified_ids: &HashSet<String>) -> bool {
-    let Ok(Some(mut data)) = storage::load_from_path(path) else {
-        return false;
+    storage::with_data_file_lock(|| persist_flags_to_path_locked(path, notified_ids))
+}
+
+fn persist_flags_to_path_locked(path: &std::path::Path, notified_ids: &HashSet<String>) -> bool {
+    let mut data = match storage::load_from_path(path) {
+        Ok(Some(data)) => data,
+        Ok(None) => {
+            eprintln!(
+                "[TaskTimer] Falha ao persistir flag de overtime: arquivo de dados ausente ({})",
+                path.display()
+            );
+            return false;
+        }
+        Err(error) => {
+            eprintln!("[TaskTimer] Falha ao ler dados para persistir flag de overtime: {error}");
+            return false;
+        }
     };
     if !apply_notified_flags(&mut data.tasks, notified_ids) {
         return false;
     }
-    storage::save_to_path(path, &data).is_ok()
+    if let Err(error) = storage::save_to_path(path, &data) {
+        eprintln!("[TaskTimer] Falha ao gravar flag de overtime: {error}");
+        return false;
+    }
+    true
 }
 
 /// Persists claimed overtime flags so a tray-quit (or crash after the tick)
 /// does not lose the "already notified" state and fire again on the next launch.
+///
+/// Ids are read *after* taking the file lock so a concurrent `save_app_data`
+/// (for example after raising the estimate) is already visible.
 pub fn persist_notified_flags(app: &AppHandle) {
     let Some(path) = tray::data_file_path(app) else {
         return;
     };
-    let Some(ids) = app
-        .try_state::<Mutex<OvertimeWatch>>()
-        .and_then(|watch| watch.lock().ok().map(|guard| guard.notified_ids.clone()))
-    else {
-        return;
-    };
-    if ids.is_empty() {
-        return;
-    }
-    if persist_flags_to_path(&path, &ids) {
+    let updated = storage::with_data_file_lock(|| {
+        let Some(ids) = app
+            .try_state::<Mutex<OvertimeWatch>>()
+            .and_then(|watch| watch.lock().ok().map(|guard| guard.notified_ids.clone()))
+        else {
+            return false;
+        };
+        if ids.is_empty() {
+            return false;
+        }
+        persist_flags_to_path(&path, &ids)
+    });
+    if updated {
         if let Ok(Some(data)) = storage::load_from_path(&path) {
             sync_watch(app, &data.tasks);
         }
@@ -380,6 +416,46 @@ mod tests {
         assert!(tasks[0].overtime_notified);
         assert!(!tasks[1].overtime_notified);
         assert!(!apply_notified_flags(&mut tasks, &ids));
+    }
+
+    #[test]
+    fn save_after_raising_estimate_does_not_restore_the_flag() {
+        let mut watch = OvertimeWatch::default();
+        let task = running(10.0, 1_000_000, 1.0, false);
+        watch.sync_from_data(std::slice::from_ref(&task), 1_000_000);
+        assert_eq!(watch.take_due(1_000_000 + 80_000).len(), 1);
+
+        // Frontend raised the estimate and cleared the flag (90s < 5 min).
+        // This is the save_app_data path: sync first, then merge.
+        let mut raised = running(10.0, 1_000_000, 5.0, false);
+        sync_then_merge_flags(
+            &mut watch,
+            std::slice::from_mut(&mut raised),
+            1_000_000 + 80_000,
+        );
+        assert!(!raised.overtime_notified);
+        assert!(watch.take_due(1_000_000 + 80_000).is_empty());
+
+        // Later the new estimate is crossed.
+        assert_eq!(watch.take_due(1_000_000 + 5 * 60_000).len(), 1);
+    }
+
+    #[test]
+    fn stale_save_after_notify_still_sets_the_flag() {
+        let mut watch = OvertimeWatch::default();
+        let task = running(10.0, 1_000_000, 1.0, false);
+        watch.sync_from_data(std::slice::from_ref(&task), 1_000_000);
+        assert_eq!(watch.take_due(1_000_000 + 80_000).len(), 1);
+
+        // A late save still has overtime_notified = false (webview was frozen).
+        let mut stale = running(10.0, 1_000_000, 1.0, false);
+        sync_then_merge_flags(
+            &mut watch,
+            std::slice::from_mut(&mut stale),
+            1_000_000 + 81_000,
+        );
+        assert!(stale.overtime_notified);
+        assert!(watch.take_due(1_000_000 + 82_000).is_empty());
     }
 
     #[test]

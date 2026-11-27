@@ -1,7 +1,9 @@
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +12,35 @@ pub const DATA_VERSION: u32 = 1;
 pub const MAX_TASKS: usize = 10_000;
 pub const MAX_TASK_NAME_CHARS: usize = 500;
 pub const MAX_DATA_BYTES: usize = 5 * 1024 * 1024;
+
+static DATA_FILE_LOCK: Mutex<()> = Mutex::new(());
+
+thread_local! {
+    static HOLDING_DATA_FILE_LOCK: Cell<bool> = const { Cell::new(false) };
+}
+
+struct DataFileLockGuard;
+
+impl Drop for DataFileLockGuard {
+    fn drop(&mut self) {
+        HOLDING_DATA_FILE_LOCK.with(|holding| holding.set(false));
+    }
+}
+
+/// Serializes every writer of the data file (frontend `save_app_data` and the
+/// overtime watchdog) so a read-modify-write cannot clobber a newer snapshot.
+/// Re-entrant on the same thread so a caller can compose load + [`save_to_path`].
+pub fn with_data_file_lock<T>(f: impl FnOnce() -> T) -> T {
+    HOLDING_DATA_FILE_LOCK.with(|holding| {
+        if holding.get() {
+            return f();
+        }
+        let _mutex = DATA_FILE_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        holding.set(true);
+        let _reset = DataFileLockGuard;
+        f()
+    })
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -226,6 +257,10 @@ pub fn load_from_path(path: &Path) -> Result<Option<PersistedAppData>, StorageEr
 }
 
 pub fn save_to_path(path: &Path, data: &PersistedAppData) -> Result<(), StorageError> {
+    with_data_file_lock(|| write_to_path(path, data))
+}
+
+fn write_to_path(path: &Path, data: &PersistedAppData) -> Result<(), StorageError> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;

@@ -44,10 +44,15 @@ pub fn load_app_data(app: AppHandle) -> Result<Option<PersistedAppData>, String>
 #[tauri::command]
 pub fn save_app_data(app: AppHandle, mut payload: PersistedAppData) -> Result<(), String> {
     let path = data_path(&app)?;
-    // Keep flags the watchdog already claimed, even if the webview payload is stale.
-    overtime::merge_notified_into(&app, &mut payload.tasks);
-    storage::save_to_path(&path, &payload).map_err(|err| err.to_string())?;
-    overtime::sync_watch(&app, &payload.tasks);
+    // Sync first so raising the estimate can forget a previous claim, then
+    // merge flags still claimed (a stale payload from a frozen webview).
+    // The file lock covers sync + merge + write so the watchdog's
+    // read-modify-write cannot interleave.
+    storage::with_data_file_lock(|| {
+        overtime::sync_and_merge_for_save(&app, &mut payload.tasks);
+        storage::save_to_path(&path, &payload)
+    })
+    .map_err(|err| err.to_string())?;
     // Future windows / tray can subscribe; the current UI already has the latest state.
     let _ = app.emit("app-data-changed", &payload);
     Ok(())
