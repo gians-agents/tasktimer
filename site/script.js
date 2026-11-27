@@ -1,6 +1,7 @@
+import { isAllowedGitHubDownloadUrl } from "./github-download-url.js";
+
 const REPO = "gians-agents/tasktimer";
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
-const LATEST_PAGE = `${RELEASES_PAGE}/latest`;
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 
 const KIND_MATCHERS = {
@@ -114,28 +115,30 @@ async function loadLatestRelease() {
 
   for (const link of links) {
     const asset = pickAsset(assets, link.dataset.kind);
-    if (asset?.browser_download_url) {
-      link.href = asset.browser_download_url;
-    } else {
-      link.href = release.html_url || RELEASES_PAGE;
-    }
+    const safeUrl = isAllowedGitHubDownloadUrl(asset?.browser_download_url)
+      ? asset.browser_download_url
+      : null;
+    link.href = safeUrl || RELEASES_PAGE;
   }
 
   const sumsAsset = pickChecksumAsset(assets);
-  const sumsUrl =
-    sumsAsset?.browser_download_url ||
-    (tag ? `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/SHA256SUMS` : null);
+  const constructedSums = tag
+    ? `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/SHA256SUMS`
+    : null;
+  const sumsUrl = [sumsAsset?.browser_download_url, constructedSums].find(
+    isAllowedGitHubDownloadUrl,
+  );
 
   if (!sumsUrl) {
-    renderHashes({ releaseUrl: release.html_url || LATEST_PAGE });
+    renderHashes({ releaseUrl: RELEASES_PAGE });
     return;
   }
 
   try {
     const text = await tryReadSums(sumsUrl);
-    renderHashes({ text, fileUrl: sumsUrl, releaseUrl: release.html_url });
+    renderHashes({ text, fileUrl: sumsUrl, releaseUrl: RELEASES_PAGE });
   } catch {
-    renderHashes({ fileUrl: sumsUrl, releaseUrl: release.html_url || LATEST_PAGE });
+    renderHashes({ fileUrl: sumsUrl, releaseUrl: RELEASES_PAGE });
     const fallback = document.getElementById("hash-fallback");
     fallback.textContent =
       "Não foi possível carregar o SHA256SUMS neste navegador. Abra o arquivo no release para conferir os hashes.";

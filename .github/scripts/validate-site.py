@@ -4,7 +4,12 @@
 from __future__ import annotations
 
 import html.parser
+import json
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +18,7 @@ REQUIRED_FILES = [
     "index.html",
     "styles.css",
     "script.js",
+    "github-download-url.js",
     "icon.svg",
     "favicon.ico",
 ]
@@ -94,6 +100,76 @@ def fail(errors: list[str]) -> None:
     sys.exit(1)
 
 
+DOWNLOAD_URL_CASES: list[tuple[object, bool]] = [
+    ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/TaskTimer_0.1.0_x64-setup.exe", True),
+    ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/SHA256SUMS", True),
+    ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/TaskTimer_0.1.0_amd64.AppImage", True),
+    ("http://github.com/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://api.github.com/repos/gians-agents/tasktimer/releases/assets/1", False),
+    ("https://objects.githubusercontent.com/github-production-release-asset/1", False),
+    ("https://github.com.evil.test/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://evil.test/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com/gians-agents/tasktimer/releases/latest/download/file.exe", False),
+    ("https://github.com/gians-agents/tasktimer/releases/tag/v0.1.0", False),
+    ("https://github.com/other/repo/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com/Gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com/gians-agents/Tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://user:pass@github.com/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://user@github.com/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com:443/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com:8443/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
+    ("https://github.com/gians-agents/tasktimer/releases/download/", False),
+    ("https://github.com/gians-agents/tasktimer/releases/download/../v0.1.0/file.exe", False),
+    ("", False),
+    (None, False),
+]
+
+
+def run_download_url_tests() -> list[str]:
+    errors: list[str] = []
+    helper = SITE / "github-download-url.js"
+    if not helper.is_file():
+        return ["missing site/github-download-url.js"]
+    node = shutil.which("node")
+    if not node:
+        return ["node is required to test isAllowedGitHubDownloadUrl"]
+    runner = """
+import { pathToFileURL } from "node:url";
+const { isAllowedGitHubDownloadUrl } = await import(pathToFileURL(process.argv[2]).href);
+const cases = JSON.parse(process.argv[3]);
+let failed = 0;
+for (const [value, expected] of cases) {
+  const actual = isAllowedGitHubDownloadUrl(value);
+  if (actual !== expected) {
+    console.error("FAIL " + JSON.stringify(value) + " expected " + expected + " got " + actual);
+    failed += 1;
+  }
+}
+if (failed) process.exit(1);
+console.log("isAllowedGitHubDownloadUrl: " + cases.length + " cases passed");
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False) as handle:
+        handle.write(runner)
+        runner_path = handle.name
+    try:
+        result = subprocess.run(
+            [node, runner_path, str(helper), json.dumps(DOWNLOAD_URL_CASES)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        os.unlink(runner_path)
+    if result.returncode != 0:
+        detail = (result.stdout + result.stderr).strip() or f"exit {result.returncode}"
+        errors.append("isAllowedGitHubDownloadUrl tests failed:\n" + detail)
+    else:
+        message = result.stdout.strip()
+        if message:
+            print(message)
+    return errors
+
+
 def main() -> None:
     errors: list[str] = []
     if not SITE.is_dir():
@@ -137,6 +213,8 @@ def main() -> None:
         errors.append("index.html must link to ./styles.css")
     if "./script.js" not in parser.scripts:
         errors.append("index.html must include ./script.js")
+    if 'type="module"' not in html_text or "./script.js" not in html_text:
+        errors.append("index.html must load ./script.js as type=module")
 
     links_by_id = {link_id: href for link_id, href, _kind, _cls in parser.links if link_id}
     fallback_hrefs = {
@@ -175,8 +253,16 @@ def main() -> None:
         errors.append("site should reference GitHub Releases latest URLs")
     if "setDownloadLinks(RELEASES_PAGE)" not in script:
         errors.append("script.js must point download buttons at the releases page when the API fails")
+    if 'from "./github-download-url.js"' not in script:
+        errors.append("script.js must import isAllowedGitHubDownloadUrl from ./github-download-url.js")
+    if "isAllowedGitHubDownloadUrl(asset?.browser_download_url)" not in script:
+        errors.append("script.js must validate asset browser_download_url before using it")
+    if "isAllowedGitHubDownloadUrl" not in script or "sumsAsset?.browser_download_url" not in script:
+        errors.append("script.js must validate the SHA256SUMS browser_download_url before fetching it")
     if REQUIRED_PHRASE not in script and REQUIRED_PHRASE not in html_text:
         errors.append("script/html must keep the hash fallback text")
+
+    errors.extend(run_download_url_tests())
 
     if errors:
         fail(errors)
@@ -186,6 +272,7 @@ def main() -> None:
     print(f" - required files: {', '.join(REQUIRED_FILES)}")
     print(" - download buttons for Windows .exe/.msi and Linux .AppImage/.deb")
     print(" - SHA256 fallback and sha256sum / Get-FileHash instructions")
+    print(" - GitHub download URL allowlist tests")
 
 
 if __name__ == "__main__":
