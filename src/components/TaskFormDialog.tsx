@@ -21,12 +21,7 @@ interface TaskFormDialogProps {
   onSubmit: (draft: TaskDraft) => void;
 }
 
-export function TaskFormDialog({
-  open,
-  editingTask,
-  onOpenChange,
-  onSubmit,
-}: TaskFormDialogProps) {
+export function TaskFormDialog({ open, editingTask, onOpenChange, onSubmit }: TaskFormDialogProps) {
   const [name, setName] = useState("");
   const [minutes, setMinutes] = useState("60");
   const [error, setError] = useState<string | null>(null);

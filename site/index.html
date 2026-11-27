@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
@@ -33,21 +33,28 @@
 
     <main>
       <section class="hero">
-        <img class="hero-icon" src="./icon.svg" width="112" height="112" alt="Ícone do TaskTimer: um cronômetro dourado em fundo verde-azulado" />
+        <img
+          class="hero-icon"
+          src="./icon.svg"
+          width="112"
+          height="112"
+          alt="Ícone do TaskTimer: um cronômetro dourado em fundo verde-azulado"
+        />
         <h1>TaskTimer</h1>
         <p class="lede">
-          Um timer de tarefas para o desktop. Acompanhe o tempo de cada atividade,
-          veja o progresso em relação à estimativa e mantenha o histórico — com
-          os dados salvos no seu computador.
+          Um timer de tarefas para o desktop. Acompanhe o tempo de cada atividade, veja o progresso
+          em relação à estimativa e mantenha o histórico — com os dados salvos no seu computador.
         </p>
         <p class="release-status" id="release-status">
-          Os instaladores serão publicados no primeiro GitHub Release. Enquanto isso,
-          os botões levam à página de releases.
+          Os instaladores serão publicados no primeiro GitHub Release. Enquanto isso, os botões
+          levam à página de releases.
           <span class="release-badge" id="release-badge" hidden>pré-release</span>
         </p>
         <p class="hero-actions">
           <a class="btn btn-gold" href="#download">Baixar o app</a>
-          <a class="btn btn-ghost" href="https://github.com/gians-agents/tasktimer">Ver o repositório</a>
+          <a class="btn btn-ghost" href="https://github.com/gians-agents/tasktimer"
+            >Ver o repositório</a
+          >
         </p>
       </section>
 
@@ -114,14 +121,20 @@
         </div>
 
         <p class="releases-fallback">
-          <a href="https://github.com/gians-agents/tasktimer/releases">Ver todos os arquivos no GitHub Releases</a>
+          <a href="https://github.com/gians-agents/tasktimer/releases"
+            >Ver todos os arquivos no GitHub Releases</a
+          >
         </p>
       </section>
 
       <section id="preview" class="section">
         <h2>Interface</h2>
         <figure class="preview-figure">
-          <div class="app-window" role="img" aria-label="Prévia ilustrativa da interface do TaskTimer, com lista de tarefas e barras de progresso">
+          <div
+            class="app-window"
+            role="img"
+            aria-label="Prévia ilustrativa da interface do TaskTimer, com lista de tarefas e barras de progresso"
+          >
             <div class="app-window-bar">
               <span class="dots" aria-hidden="true"></span>
               <span class="app-window-title">TaskTimer</span>
@@ -151,7 +164,8 @@
             </div>
           </div>
           <figcaption>
-            Prévia ilustrativa da interface (placeholder). Uma captura de tela real do app será publicada em breve.
+            Prévia ilustrativa da interface (placeholder). Uma captura de tela real do app será
+            publicada em breve.
           </figcaption>
         </figure>
       </section>
@@ -159,15 +173,17 @@
       <section id="hashes" class="section">
         <h2>Verificação de integridade (SHA256)</h2>
         <p class="section-intro">
-          Depois de baixar, compare o hash do arquivo com a lista oficial do release.
-          Assim você confirma que o instalador não foi alterado no caminho.
+          Depois de baixar, compare o hash do arquivo com a lista oficial do release. Assim você
+          confirma que o instalador não foi alterado no caminho.
         </p>
 
         <div class="hash-panel">
           <p id="hash-fallback">Hashes disponíveis após o primeiro release</p>
           <pre id="hash-contents" hidden></pre>
           <p id="hash-link-wrap" hidden>
-            <a id="hash-file-link" href="https://github.com/gians-agents/tasktimer/releases">Abrir SHA256SUMS no GitHub Releases</a>
+            <a id="hash-file-link" href="https://github.com/gians-agents/tasktimer/releases"
+              >Abrir SHA256SUMS no GitHub Releases</a
+            >
           </p>
         </div>
 

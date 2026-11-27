@@ -134,11 +134,9 @@ async function applyRelease(release) {
   const constructedSums = tag
     ? `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/SHA256SUMS`
     : null;
-  const sumsUrl = [
-    release.sha256sums_url,
-    sumsAsset?.browser_download_url,
-    constructedSums,
-  ].find(isAllowedGitHubDownloadUrl);
+  const sumsUrl = [release.sha256sums_url, sumsAsset?.browser_download_url, constructedSums].find(
+    isAllowedGitHubDownloadUrl,
+  );
   const releasePage =
     typeof release.html_url === "string" && release.html_url.startsWith(RELEASES_PAGE)
       ? release.html_url

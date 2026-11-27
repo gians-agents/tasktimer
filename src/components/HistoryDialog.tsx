@@ -34,12 +34,7 @@ function formatFinishedDate(iso: string | null): string {
   }).format(date);
 }
 
-export function HistoryDialog({
-  open,
-  tasks,
-  onOpenChange,
-  onDeleteTask,
-}: HistoryDialogProps) {
+export function HistoryDialog({ open, tasks, onOpenChange, onDeleteTask }: HistoryDialogProps) {
   const [filter, setFilter] = useState<HistoryFilter>("all");
 
   const completedCount = useMemo(

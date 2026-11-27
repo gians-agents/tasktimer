@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const isTauri = vi.fn(() => false);
 const invoke = vi.fn();
 const isPermissionGranted = vi.fn(async () => false);
-const requestPermission = vi.fn(async () => "denied" as const);
+const requestPermission = vi.fn(async (): Promise<"denied" | "granted" | "default"> => "denied");
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => isTauri(),
@@ -213,7 +213,6 @@ describe("native overtime notifications", () => {
         value: originalNotification,
       });
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete (globalThis as { Notification?: unknown }).Notification;
     }
   });
@@ -306,12 +305,14 @@ describe("native JSON export and import", () => {
     URL.createObjectURL = vi.fn(() => "blob:export") as typeof URL.createObjectURL;
     URL.revokeObjectURL = vi.fn();
     const realCreate = document.createElement.bind(document);
-    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tag: string, options?: ElementCreationOptions) => {
-      if (tag === "a") {
-        return { href: "", download: "", click } as unknown as HTMLAnchorElement;
-      }
-      return realCreate(tag, options);
-    });
+    const createSpy = vi
+      .spyOn(document, "createElement")
+      .mockImplementation((tag: string, options?: ElementCreationOptions) => {
+        if (tag === "a") {
+          return { href: "", download: "", click } as unknown as HTMLAnchorElement;
+        }
+        return realCreate(tag, options);
+      });
 
     await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).resolves.toEqual({
       status: "browser",
@@ -347,7 +348,9 @@ describe("native JSON export and import", () => {
     isTauri.mockReturnValue(true);
     invoke.mockRejectedValue(new Error("disco cheio"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).rejects.toThrow("disco cheio");
+    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).rejects.toThrow(
+      "disco cheio",
+    );
     spy.mockRestore();
   });
 

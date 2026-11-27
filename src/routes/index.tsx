@@ -71,7 +71,7 @@ function Index() {
       <Header
         historyCount={historyTasks.length}
         startMinimized={settings.startMinimized}
-        appVersion={appInfo?.version}
+        appVersion={appInfo?.version ?? null}
         onAddClick={openCreateDialog}
         onHistoryClick={() => setHistoryOpen(true)}
         onExportJson={() => void exportJson()}

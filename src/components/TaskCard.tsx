@@ -101,7 +101,10 @@ export function TaskCard({
           />
         </div>
         <span
-          className={cn("timer-digits w-12 shrink-0 text-right text-xs font-semibold", PERCENT_TONE_CLASS[tone])}
+          className={cn(
+            "timer-digits w-12 shrink-0 text-right text-xs font-semibold",
+            PERCENT_TONE_CLASS[tone],
+          )}
         >
           {percent}%
         </span>

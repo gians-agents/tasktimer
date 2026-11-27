@@ -38,7 +38,6 @@ No app desktop, **Exportar JSON** abre o diálogo nativo “Salvar como”, com 
 
 No navegador, a exportação segue o download por âncora e a importação usa o seletor de arquivo da página.
 
-
 ## Desenvolvimento
 
 ```sh
@@ -50,6 +49,25 @@ Também é possível usar `npm install` e `npm run dev`. Para o build de produç
 
 ```sh
 bun run build
+```
+
+## Lint e verificação de tipos
+
+No frontend:
+
+```sh
+bun run lint
+bun run typecheck
+bun run format:check
+```
+
+Para reescrever a formatação automaticamente: `bun run format`.
+
+No crate Rust (`src-tauri`):
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 ```
 
 ## Pacotes Linux (bandeja)
