@@ -47,6 +47,7 @@ pub fn show_main_window(app: &AppHandle) {
 /// A second process launch always reveals the existing window — even if
 /// `start_minimized` is enabled or the window is hidden in the tray.
 /// That preference only applies to the first process start.
+#[cfg(test)]
 pub fn should_show_main_window_on_second_instance(_start_minimized: bool) -> bool {
     true
 }
@@ -54,13 +55,10 @@ pub fn should_show_main_window_on_second_instance(_start_minimized: bool) -> boo
 /// Focus helper used by `tauri-plugin-single-instance`.
 /// Always unminimizes, shows and focuses the main window, even when
 /// `start_minimized` is set (that preference applies only at first start).
+/// Does not read the data file: the policy is unconditional, and loading
+/// would also risk promoting leftover `.tmp`/`.bak` files as a side effect.
 pub fn show_main_window_from_second_instance(app: &AppHandle) {
-    let start_minimized = data_file_path(app)
-        .map(|path| read_start_minimized(&path))
-        .unwrap_or(false);
-    if should_show_main_window_on_second_instance(start_minimized) {
-        show_main_window(app);
-    }
+    show_main_window(app);
 }
 
 pub fn toggle_main_window(app: &AppHandle) {
