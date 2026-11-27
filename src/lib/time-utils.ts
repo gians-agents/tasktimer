@@ -36,7 +36,10 @@ export function getLiveElapsedSeconds(task: Task, nowMs: number): number {
 }
 
 /** Detects overtime from wall-clock elapsed time, even if JS timers were throttled. */
-export function findNewlyOvertimeTasks(tasks: Task[], nowMs: number): { tasks: Task[]; newlyOvertime: Task[] } {
+export function findNewlyOvertimeTasks(
+  tasks: Task[],
+  nowMs: number,
+): { tasks: Task[]; newlyOvertime: Task[] } {
   const newlyOvertime: Task[] = [];
   const next = tasks.map((task) => {
     if (!task.isRunning || task.overtimeNotified) return task;
@@ -98,12 +101,16 @@ export function parseImportedJson(rawJson: string): { tasks: Task[]; startMinimi
 
   const rawTasks = Array.isArray(parsed)
     ? parsed
-    : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as Record<string, unknown>)["tasks"])
+    : typeof parsed === "object" &&
+        parsed !== null &&
+        Array.isArray((parsed as Record<string, unknown>)["tasks"])
       ? ((parsed as Record<string, unknown>)["tasks"] as unknown[])
       : null;
 
   if (!rawTasks) {
-    throw new Error("Formato inválido: esperado um objeto com a lista 'tasks' ou um array de tarefas.");
+    throw new Error(
+      "Formato inválido: esperado um objeto com a lista 'tasks' ou um array de tarefas.",
+    );
   }
 
   const validTasks: Task[] = rawTasks.filter(isValidTask).map((task) => ({

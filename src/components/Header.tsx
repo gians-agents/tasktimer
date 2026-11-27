@@ -1,13 +1,5 @@
 import { useRef } from "react";
-import {
-  Download,
-  History,
-  Minimize2,
-  MoreHorizontal,
-  Plus,
-  Timer,
-  Upload,
-} from "lucide-react";
+import { Download, History, Minimize2, MoreHorizontal, Plus, Timer, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {

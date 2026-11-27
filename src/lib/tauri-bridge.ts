@@ -65,7 +65,10 @@ export async function loadPersistedData(): Promise<LoadPersistedResult> {
       } else if (Array.isArray(fromTauri.tasks)) {
         return { status: "ready", data: fromTauri };
       } else {
-        return { status: "error", message: "O arquivo de dados do app está em um formato inesperado." };
+        return {
+          status: "error",
+          message: "O arquivo de dados do app está em um formato inesperado.",
+        };
       }
     } catch (error) {
       console.error('[TaskTimer] Falha ao invocar comando Tauri "load_app_data":', error);
@@ -144,9 +147,8 @@ export type OvertimeNotificationChannel = "tauri" | "browser" | "toast-only" | "
 export async function requestNotificationPermission(): Promise<boolean> {
   if (isTauri()) {
     try {
-      const { isPermissionGranted, requestPermission } = await import(
-        "@tauri-apps/plugin-notification"
-      );
+      const { isPermissionGranted, requestPermission } =
+        await import("@tauri-apps/plugin-notification");
       if (await isPermissionGranted()) return true;
       return (await requestPermission()) === "granted";
     } catch (error) {

@@ -37,7 +37,9 @@ export function useTaskTimer() {
   const overtimeToastedRef = useRef(new Set<string>());
 
   const pruneOvertimeToasts = (nextTasks: Task[]) => {
-    const flagged = new Set(nextTasks.filter((task) => task.overtimeNotified).map((task) => task.id));
+    const flagged = new Set(
+      nextTasks.filter((task) => task.overtimeNotified).map((task) => task.id),
+    );
     for (const id of overtimeToastedRef.current) {
       if (!flagged.has(id)) overtimeToastedRef.current.delete(id);
     }
@@ -50,7 +52,6 @@ export function useTaskTimer() {
       description: `"${taskName}" passou de ${estimatedMinutes} min.`,
     });
   };
-
 
   tasksRef.current = tasks;
   settingsRef.current = settings;
@@ -82,7 +83,8 @@ export function useTaskTimer() {
         persistBlockedRef.current = true;
         setStorageError(loaded.message);
         toast.error("Não foi possível carregar as tarefas salvas", {
-          description: "O arquivo local não foi alterado. Feche o app e tente novamente, ou restaure um backup.",
+          description:
+            "O arquivo local não foi alterado. Feche o app e tente novamente, ou restaure um backup.",
         });
       }
       if (info) setAppInfo(info);
@@ -173,9 +175,16 @@ export function useTaskTimer() {
     let unlisten: (() => void) | undefined;
     void import("@tauri-apps/api/event")
       .then(({ listen }) =>
-        listen<{ id: string; name: string; estimatedMinutes: number }>("overtime-detected", (event) => {
-          markOvertimeAndToast(event.payload.id, event.payload.name, event.payload.estimatedMinutes);
-        }),
+        listen<{ id: string; name: string; estimatedMinutes: number }>(
+          "overtime-detected",
+          (event) => {
+            markOvertimeAndToast(
+              event.payload.id,
+              event.payload.name,
+              event.payload.estimatedMinutes,
+            );
+          },
+        ),
       )
       .then((fn) => {
         if (cancelled) fn();
