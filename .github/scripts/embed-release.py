@@ -32,6 +32,18 @@ EMPTY_RELEASE = {
 }
 
 
+def normalize_url_pathname(path: str) -> str:
+    """Resolve '.' and '..' the way new URL().pathname does.
+
+    urllib.parse.urlparse leaves those segments in place. urljoin applies
+    RFC 3986 remove_dot_segments, which matches the WHATWG URL parser for
+    the download paths we check (e.g. '.../releases/download/../v0.1.0/x'
+    becomes '.../releases/v0.1.0/x' and fails the prefix test).
+    """
+    # A leading slash makes this an absolute path on the dummy origin.
+    return urllib.parse.urlparse(urllib.parse.urljoin("https://github.com", path or "/")).path
+
+
 def is_allowed_github_download_url(value: object) -> bool:
     """Mirror site/github-download-url.js (including URL pathname normalization)."""
     if not isinstance(value, str) or not value:
@@ -53,9 +65,7 @@ def is_allowed_github_download_url(value: object) -> bool:
     authority = re.match(r"https://([^/?#]+)", value, flags=re.IGNORECASE)
     if not authority or authority.group(1) != "github.com":
         return False
-    # new URL() resolves "." / ".." before the pathname prefix check.
-    path = urllib.parse.urljoin("https://github.com/", parsed.path)
-    pathname = urllib.parse.urlparse(path).path
+    pathname = normalize_url_pathname(parsed.path)
     if not pathname.startswith(GITHUB_DOWNLOAD_PREFIX):
         return False
     if len(pathname) <= len(GITHUB_DOWNLOAD_PREFIX):

@@ -134,6 +134,8 @@ DOWNLOAD_URL_CASES: list[tuple[object, bool]] = [
     ("https://github.com:8443/gians-agents/tasktimer/releases/download/v0.1.0/file.exe", False),
     ("https://github.com/gians-agents/tasktimer/releases/download/", False),
     ("https://github.com/gians-agents/tasktimer/releases/download/../v0.1.0/file.exe", False),
+    ("https://github.com/gians-agents/tasktimer/releases/download/./v0.1.0/SHA256SUMS", True),
+    ("https://github.com/gians-agents/tasktimer/releases/download/v0.1.0/foo/../SHA256SUMS", True),
     ("", False),
     (None, False),
 ]
@@ -198,8 +200,17 @@ def run_embed_allowlist_tests() -> list[str]:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     fn = getattr(module, "is_allowed_github_download_url", None)
+    normalize = getattr(module, "normalize_url_pathname", None)
     if not callable(fn):
         return ["embed-release.py must export is_allowed_github_download_url"]
+    if not callable(normalize):
+        return ["embed-release.py must export normalize_url_pathname"]
+    expected_path = "/gians-agents/tasktimer/releases/v0.1.0/file.exe"
+    actual_path = normalize("/gians-agents/tasktimer/releases/download/../v0.1.0/file.exe")
+    if actual_path != expected_path:
+        errors.append(
+            f"normalize_url_pathname did not resolve '..': {actual_path!r} != {expected_path!r}"
+        )
     failed = 0
     for value, expected in DOWNLOAD_URL_CASES:
         actual = fn(value)

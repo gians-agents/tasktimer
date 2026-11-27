@@ -12,12 +12,14 @@ on:
       - ".github/workflows/static-site.yml"
       - ".github/scripts/validate-site.py"
       - ".github/scripts/embed-release.py"
+      - ".github/scripts/test-embedded-release.py"
   pull_request:
     paths:
       - "site/**"
       - ".github/workflows/static-site.yml"
       - ".github/scripts/validate-site.py"
       - ".github/scripts/embed-release.py"
+      - ".github/scripts/test-embedded-release.py"
   workflow_dispatch:
   release:
     types: [published]
