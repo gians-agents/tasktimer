@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://api.github.com https://github.com https://release-assets.githubusercontent.com; base-uri 'self'; form-action 'none'; object-src 'none'"
+    />
+    <meta
       name="description"
       content="TaskTimer é um aplicativo desktop para acompanhar o tempo gasto em cada tarefa, com progresso visual, histórico e persistência local."
     />
@@ -12,12 +16,6 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./icon-256.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -45,6 +43,7 @@
         <p class="release-status" id="release-status">
           Os instaladores serão publicados no primeiro GitHub Release. Enquanto isso,
           os botões levam à página de releases.
+          <span class="release-badge" id="release-badge" hidden>pré-release</span>
         </p>
         <p class="hero-actions">
           <a class="btn btn-gold" href="#download">Baixar o app</a>

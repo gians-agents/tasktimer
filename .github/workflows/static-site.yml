@@ -11,12 +11,18 @@ on:
       - "site/**"
       - ".github/workflows/static-site.yml"
       - ".github/scripts/validate-site.py"
+      - ".github/scripts/embed-release.py"
+      - ".github/scripts/test-embedded-release.py"
   pull_request:
     paths:
       - "site/**"
       - ".github/workflows/static-site.yml"
       - ".github/scripts/validate-site.py"
+      - ".github/scripts/embed-release.py"
+      - ".github/scripts/test-embedded-release.py"
   workflow_dispatch:
+  release:
+    types: [published]
 
 # Job-level blocks grant pages/id-token only where deploy needs them.
 permissions:
@@ -26,7 +32,9 @@ concurrency:
   # Isolate production (refs/heads/main) from PR checks so a new PR run
   # cannot cancel an in-progress deploy. Cancel only superseded checks
   # on the same PR ref.
-  group: pages-${{ github.workflow }}-${{ github.ref }}
+  # PRs stay isolated by ref; push, workflow_dispatch and release: published
+  # share one production group so they queue instead of racing.
+  group: pages-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -43,9 +51,12 @@ jobs:
       - name: Validate Pages site
         run: python3 .github/scripts/validate-site.py
 
+      - name: Test embedded release over HTTP
+        run: python3 .github/scripts/test-embedded-release.py
+
   build:
     name: Upload Pages artifact
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.event_name == 'release' || (github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch'))
     needs: check
     runs-on: ubuntu-22.04
     timeout-minutes: 10
@@ -55,6 +66,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # On release: published, github.ref is the tag. Deploy the site from main.
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || github.sha }}
+
+      - name: Embed latest published release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/embed-release.py
 
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -66,7 +86,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.event_name == 'release' || (github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch'))
     needs: build
     runs-on: ubuntu-22.04
     timeout-minutes: 10

@@ -26,3 +26,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated at GitHub Pages deploy time; do not commit a baked copy.
+site/release.json
