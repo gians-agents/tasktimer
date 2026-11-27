@@ -42,8 +42,10 @@ pub fn load_app_data(app: AppHandle) -> Result<Option<PersistedAppData>, String>
 }
 
 #[tauri::command]
-pub fn save_app_data(app: AppHandle, payload: PersistedAppData) -> Result<(), String> {
+pub fn save_app_data(app: AppHandle, mut payload: PersistedAppData) -> Result<(), String> {
     let path = data_path(&app)?;
+    // Keep flags the watchdog already claimed, even if the webview payload is stale.
+    overtime::merge_notified_into(&app, &mut payload.tasks);
     storage::save_to_path(&path, &payload).map_err(|err| err.to_string())?;
     overtime::sync_watch(&app, &payload.tasks);
     // Future windows / tray can subscribe; the current UI already has the latest state.
@@ -52,16 +54,12 @@ pub fn save_app_data(app: AppHandle, payload: PersistedAppData) -> Result<(), St
 }
 
 /// Shows a native overtime notification, at most once per crossing of the estimate.
-/// Returns `true` when a new notification was displayed, `false` if this task
-/// was already notified (or a Rust watchdog beat the frontend to it).
+/// The body is built from the Rust snapshot for `task_id`, not from webview-supplied
+/// name or estimate. Returns `true` when a new notification was displayed, `false`
+/// if this task was already notified, or if it is not in the snapshot.
 #[tauri::command]
-pub fn notify_overtime(
-    app: AppHandle,
-    task_id: String,
-    task_name: String,
-    estimated_minutes: f64,
-) -> bool {
-    overtime::claim_and_show(&app, &task_id, &task_name, estimated_minutes)
+pub fn notify_overtime(app: AppHandle, task_id: String) -> bool {
+    overtime::claim_and_show(&app, &task_id)
 }
 
 #[tauri::command]

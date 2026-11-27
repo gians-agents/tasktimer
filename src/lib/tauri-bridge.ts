@@ -166,10 +166,10 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Shows the overtime alert. In Tauri this goes through `notify_overtime`,
- * which uses `tauri-plugin-notification` and dedupes per task crossing.
- * The browser keeps the Notification API. If permission is denied or the
- * plugin is unavailable, the caller should fall back to a toast.
+ * Shows the overtime alert. In Tauri this goes through `notify_overtime`
+ * (task id only; the Rust side looks up name and estimate, then dedupes
+ * per crossing). The browser keeps the Notification API. If permission is
+ * denied or the plugin is unavailable, the caller should fall back to a toast.
  */
 export async function sendOvertimeNotification(
   taskName: string,
@@ -184,8 +184,6 @@ export async function sendOvertimeNotification(
       if (!(await requestNotificationPermission())) return "toast-only";
       const sent = await invoke<boolean>("notify_overtime", {
         taskId: taskId ?? "",
-        taskName,
-        estimatedMinutes,
       });
       return sent ? "tauri" : "already";
     } catch (error) {

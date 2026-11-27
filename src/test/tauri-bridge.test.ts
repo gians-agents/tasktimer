@@ -245,8 +245,6 @@ describe("native overtime notifications", () => {
     expect(requestPermission).toHaveBeenCalled();
     expect(invoke).toHaveBeenCalledWith("notify_overtime", {
       taskId: "t-1",
-      taskName: "Revisar PR",
-      estimatedMinutes: 45,
     });
   });
 

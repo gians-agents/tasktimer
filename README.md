@@ -22,7 +22,7 @@ Uma segunda execução do TaskTimer não abre outra janela: o processo novo ence
 
 Quando uma tarefa em execução ultrapassa o tempo estimado, o app desktop envia uma notificação do sistema — inclusive se a janela estiver oculta na bandeja ou sem foco. Há no máximo **uma notificação por travessia** do limite (`overtimeNotified` + deduplicação no Rust).
 
-O tempo é medido em relógio de parede (`lastStartedAt`). O webview pode ter o `setInterval` restringido ou pausado com a janela oculta, então um watchdog no processo Rust revisa as tarefas em execução a cada segundo (a partir do último `save_app_data`) e dispara a notificação mesmo se o JavaScript estiver congelado. Quando o webview volta, ele só sincroniza a flag e o toast — não manda uma segunda notificação nativa.
+O tempo é medido em relógio de parede (`lastStartedAt`). O webview pode ter o `setInterval` restringido ou pausado com a janela oculta, então um watchdog no processo Rust revisa as tarefas em execução a cada segundo (a partir do último `save_app_data`) e dispara a notificação mesmo se o JavaScript estiver congelado. A flag `overtimeNotified` é gravada no arquivo de dados na hora do disparo (e de novo ao sair pela bandeja), para que um “Sair” com a janela oculta — quando o JavaScript não consegue persistir — não gere uma segunda notificação na próxima abertura. Quando o webview volta, ele só sincroniza a flag e o toast — não manda uma segunda notificação nativa.
 
 Clicar na notificação tenta mostrar, desminimizar e focar a janela principal. No Windows o clique só é reportado enquanto o toast está visível, não depois de ir para a Central de Ações. No Linux depende do servidor de notificações.
 

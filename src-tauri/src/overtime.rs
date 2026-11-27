@@ -98,6 +98,9 @@ impl OvertimeWatch {
         }
         for event in &due {
             self.notified_ids.insert(event.id.clone());
+            if let Some(task) = self.tasks.iter_mut().find(|task| task.id == event.id) {
+                task.overtime_notified = true;
+            }
         }
         due
     }
@@ -120,20 +123,94 @@ pub fn sync_watch(app: &AppHandle, tasks: &[Task]) {
     }
 }
 
-pub fn claim_and_show(
-    app: &AppHandle,
-    task_id: &str,
-    task_name: &str,
-    estimated_minutes: f64,
-) -> bool {
-    let claimed = app
-        .try_state::<Mutex<OvertimeWatch>>()
-        .and_then(|watch| watch.lock().ok().map(|mut guard| guard.claim(task_id)))
-        .unwrap_or(true);
-    if !claimed {
+/// Sets `overtime_notified` on tasks already claimed in `notified_ids`.
+/// Returns whether any flag was newly set.
+pub fn apply_notified_flags(tasks: &mut [Task], notified_ids: &HashSet<String>) -> bool {
+    let mut changed = false;
+    for task in tasks {
+        if notified_ids.contains(&task.id) && !task.overtime_notified {
+            task.overtime_notified = true;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Merges in-memory claims onto a frontend payload so a stale `save_app_data`
+/// cannot clear a flag the watchdog already raised.
+pub fn merge_notified_into(app: &AppHandle, tasks: &mut [Task]) {
+    if let Some(watch) = app.try_state::<Mutex<OvertimeWatch>>() {
+        if let Ok(guard) = watch.lock() {
+            apply_notified_flags(tasks, &guard.notified_ids);
+        }
+    }
+}
+
+/// Loads the data file, sets claimed overtime flags, and writes it back atomically.
+/// Returns `true` when the file was updated.
+pub fn persist_flags_to_path(path: &std::path::Path, notified_ids: &HashSet<String>) -> bool {
+    let Ok(Some(mut data)) = storage::load_from_path(path) else {
+        return false;
+    };
+    if !apply_notified_flags(&mut data.tasks, notified_ids) {
         return false;
     }
-    show_overtime_notification(app, task_name, estimated_minutes);
+    storage::save_to_path(path, &data).is_ok()
+}
+
+/// Persists claimed overtime flags so a tray-quit (or crash after the tick)
+/// does not lose the "already notified" state and fire again on the next launch.
+pub fn persist_notified_flags(app: &AppHandle) {
+    let Some(path) = tray::data_file_path(app) else {
+        return;
+    };
+    let Some(ids) = app
+        .try_state::<Mutex<OvertimeWatch>>()
+        .and_then(|watch| watch.lock().ok().map(|guard| guard.notified_ids.clone()))
+    else {
+        return;
+    };
+    if ids.is_empty() {
+        return;
+    }
+    if persist_flags_to_path(&path, &ids) {
+        if let Ok(Some(data)) = storage::load_from_path(&path) {
+            sync_watch(app, &data.tasks);
+        }
+    }
+}
+
+/// Looks up `task_id` in the watchdog snapshot and shows a native notification
+/// at most once per crossing. Name and estimate come from the snapshot, not
+/// from the webview.
+pub fn claim_and_show(app: &AppHandle, task_id: &str) -> bool {
+    let Some(watch) = app.try_state::<Mutex<OvertimeWatch>>() else {
+        return false;
+    };
+    let Ok(mut guard) = watch.lock() else {
+        return false;
+    };
+    let Some(event) = guard
+        .tasks
+        .iter()
+        .find(|task| task.id == task_id)
+        .map(|task| OvertimeEvent {
+            id: task.id.clone(),
+            name: task.name.clone(),
+            estimated_minutes: task.estimated_minutes,
+        })
+    else {
+        return false;
+    };
+    if !guard.claim(&event.id) {
+        return false;
+    }
+    if let Some(task) = guard.tasks.iter_mut().find(|task| task.id == event.id) {
+        task.overtime_notified = true;
+    }
+    drop(guard);
+    show_overtime_notification(app, &event.name, event.estimated_minutes);
+    persist_notified_flags(app);
     true
 }
 
@@ -158,10 +235,14 @@ fn tick(app: &AppHandle) {
         },
         None => return,
     };
-    for event in due {
-        show_overtime_notification(app, &event.name, event.estimated_minutes);
-        let _ = app.emit(OVERTIME_EVENT, &event);
+    if due.is_empty() {
+        return;
     }
+    for event in &due {
+        show_overtime_notification(app, &event.name, event.estimated_minutes);
+        let _ = app.emit(OVERTIME_EVENT, event);
+    }
+    persist_notified_flags(app);
 }
 
 pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
@@ -277,5 +358,61 @@ mod tests {
             overtime_body("Revisar PR", 45.0),
             "\"Revisar PR\" passou de 45 min estimados."
         );
+    }
+
+    #[test]
+    fn take_due_sets_the_snapshot_flag() {
+        let mut watch = OvertimeWatch::default();
+        let task = running(10.0, 1_000_000, 1.0, false);
+        watch.sync_from_data(std::slice::from_ref(&task), 1_000_000);
+        assert_eq!(watch.take_due(1_000_000 + 80_000).len(), 1);
+        assert!(watch.tasks[0].overtime_notified);
+    }
+
+    #[test]
+    fn apply_notified_flags_sets_only_claimed_ids() {
+        let claimed = running(10.0, 1_000_000, 1.0, false);
+        let mut other = running(10.0, 1_000_000, 1.0, false);
+        other.id = "t-2".into();
+        let ids: HashSet<String> = ["t-1".into()].into_iter().collect();
+        let mut tasks = vec![claimed, other];
+        assert!(apply_notified_flags(&mut tasks, &ids));
+        assert!(tasks[0].overtime_notified);
+        assert!(!tasks[1].overtime_notified);
+        assert!(!apply_notified_flags(&mut tasks, &ids));
+    }
+
+    #[test]
+    fn persist_flags_to_path_writes_the_flag_without_clobbering_other_fields() {
+        use crate::storage::{AppSettings, DATA_FILE_NAME, DATA_VERSION};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let dir = std::env::temp_dir().join(format!(
+            "tasktimer-overtime-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join(DATA_FILE_NAME);
+        let task = running(42.0, 1_000_000, 1.0, false);
+        let data = PersistedAppData {
+            version: DATA_VERSION,
+            tasks: vec![task],
+            settings: AppSettings {
+                start_minimized: true,
+            },
+        };
+        storage::save_to_path(&path, &data).unwrap();
+
+        let ids: HashSet<String> = ["t-1".into()].into_iter().collect();
+        assert!(persist_flags_to_path(&path, &ids));
+        let loaded = storage::load_from_path(&path).unwrap().unwrap();
+        assert!(loaded.tasks[0].overtime_notified);
+        assert_eq!(loaded.tasks[0].elapsed_seconds, 42.0);
+        assert!(loaded.settings.start_minimized);
+        assert!(!persist_flags_to_path(&path, &ids));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

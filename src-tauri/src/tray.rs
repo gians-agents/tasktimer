@@ -4,6 +4,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Window, WindowEvent};
 
+use crate::overtime;
 use crate::storage::{self, PersistedAppData};
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -78,8 +79,8 @@ pub fn toggle_main_window(app: &AppHandle) {
 /// to exit for real.
 ///
 /// Elapsed time is wall-clock (`lastStartedAt`), so a frozen WebView is corrected
-/// when the window is shown again. Overtime toasts/notifications still depend on
-/// the JS interval in the webview and may be delayed while the window is hidden.
+/// when the window is shown again. A Rust watchdog also checks running tasks every
+/// second and sends the native overtime notification even if the webview is frozen.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if window.label() != MAIN_WINDOW_LABEL {
         return;
@@ -126,7 +127,10 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => show_main_window(app),
             "hide" => hide_main_window(app),
-            "quit" => app.exit(0),
+            "quit" => {
+                overtime::persist_notified_flags(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
