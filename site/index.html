@@ -130,42 +130,29 @@
       <section id="preview" class="section">
         <h2>Interface</h2>
         <figure class="preview-figure">
-          <div
-            class="app-window"
-            role="img"
-            aria-label="Prévia ilustrativa da interface do TaskTimer, com lista de tarefas e barras de progresso"
-          >
-            <div class="app-window-bar">
-              <span class="dots" aria-hidden="true"></span>
-              <span class="app-window-title">TaskTimer</span>
-            </div>
-            <div class="app-window-body">
-              <div class="mock-card">
-                <div class="mock-card-head">
-                  <strong>Revisar o relatório</strong>
-                  <span class="mock-time">00:24:10 / 00:45:00</span>
-                </div>
-                <div class="mock-bar"><span class="mock-bar-fill-54"></span></div>
-              </div>
-              <div class="mock-card mock-card-over">
-                <div class="mock-card-head">
-                  <strong>Preparar a apresentação</strong>
-                  <span class="mock-time">01:12:04 / 01:00:00</span>
-                </div>
-                <div class="mock-bar"><span class="mock-bar-fill-100"></span></div>
-              </div>
-              <div class="mock-card mock-card-paused">
-                <div class="mock-card-head">
-                  <strong>Organizar a caixa de entrada</strong>
-                  <span class="mock-time">00:08:22 / 00:20:00</span>
-                </div>
-                <div class="mock-bar"><span class="mock-bar-fill-42"></span></div>
-              </div>
-            </div>
-          </div>
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              type="image/webp"
+              srcset="./assets/screenshot-dark.webp"
+            />
+            <source
+              media="(prefers-color-scheme: dark)"
+              type="image/png"
+              srcset="./assets/screenshot-dark.png"
+            />
+            <source type="image/webp" srcset="./assets/screenshot-light.webp" />
+            <img
+              class="preview-shot"
+              src="./assets/screenshot-light.png"
+              width="920"
+              height="778"
+              alt="Captura de tela do TaskTimer com três tarefas: Revisar o relatório em andamento, Preparar a apresentação acima do tempo estimado e Organizar a caixa de entrada pausada."
+            />
+          </picture>
           <figcaption>
-            Prévia ilustrativa da interface (placeholder). Uma captura de tela real do app será
-            publicada em breve.
+            Interface do TaskTimer com tarefas ativas, cronômetro em andamento e destaque para o
+            tempo acima do estimado. A imagem acompanha o tema claro ou escuro do sistema.
           </figcaption>
         </figure>
       </section>
