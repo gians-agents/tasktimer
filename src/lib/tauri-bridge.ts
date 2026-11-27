@@ -210,3 +210,68 @@ export async function sendOvertimeNotification(
 
   return "toast-only";
 }
+
+export type SaveExportResult =
+  | { status: "cancelled" }
+  | { status: "saved"; path: string }
+  | { status: "browser" };
+
+/** Default Save-As filename, using the local calendar date. */
+export function defaultExportFileName(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `tasktimer-${year}-${month}-${day}.json`;
+}
+
+function downloadJsonInBrowser(contents: string, fileName: string) {
+  const blob = new Blob([contents], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * In Tauri, opens the native Save dialog and writes the JSON via a Rust command
+ * (no broad filesystem plugin scope). In the browser, triggers an anchor download.
+ * `cancelled` means the user closed the dialog; write failures are thrown.
+ */
+export async function saveExportedJson(
+  contents: string,
+  defaultFileName: string,
+): Promise<SaveExportResult> {
+  if (isTauri()) {
+    try {
+      const path = await invoke<string | null>("export_json", {
+        contents,
+        defaultFileName,
+      });
+      if (path === null) return { status: "cancelled" };
+      return { status: "saved", path };
+    } catch (error) {
+      console.error('[TaskTimer] Falha ao invocar comando Tauri "export_json":', error);
+      throw error;
+    }
+  }
+
+  downloadJsonInBrowser(contents, defaultFileName);
+  return { status: "browser" };
+}
+
+/**
+ * In Tauri, opens the native Open dialog and returns the file text.
+ * Returns `null` when the user cancels, or when not running inside Tauri
+ * (the browser still uses a hidden file input).
+ */
+export async function pickImportedJson(): Promise<string | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<string | null>("import_json");
+  } catch (error) {
+    console.error('[TaskTimer] Falha ao invocar comando Tauri "import_json":', error);
+    throw error;
+  }
+}

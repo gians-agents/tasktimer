@@ -1,5 +1,14 @@
 import type { PersistedAppData, ProgressTone, Task } from "@/types/task";
 
+/** Must stay in sync with `MAX_DATA_BYTES` in `src-tauri/src/storage.rs`. */
+export const MAX_DATA_BYTES = 5 * 1024 * 1024;
+
+export function assertImportPayloadSize(byteLength: number): void {
+  if (byteLength > MAX_DATA_BYTES) {
+    throw new Error(`arquivo de importação excede o limite de ${MAX_DATA_BYTES} bytes`);
+  }
+}
+
 export function formatDuration(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(safe / 3600);
