@@ -8,6 +8,7 @@ import {
   isTauri,
   loadPersistedData,
   minimizeToTray,
+  requestNotificationPermission,
   savePersistedData,
   sendOvertimeNotification,
   setStartMinimizedPreference,
@@ -33,6 +34,23 @@ export function useTaskTimer() {
   const tasksRef = useRef<Task[]>([]);
   const settingsRef = useRef<AppSettings>(DEFAULT_SETTINGS);
   const persistBlockedRef = useRef(false);
+  const overtimeToastedRef = useRef(new Set<string>());
+
+  const pruneOvertimeToasts = (nextTasks: Task[]) => {
+    const flagged = new Set(nextTasks.filter((task) => task.overtimeNotified).map((task) => task.id));
+    for (const id of overtimeToastedRef.current) {
+      if (!flagged.has(id)) overtimeToastedRef.current.delete(id);
+    }
+  };
+
+  const toastOvertimeOnce = (taskId: string, taskName: string, estimatedMinutes: number) => {
+    if (overtimeToastedRef.current.has(taskId)) return;
+    overtimeToastedRef.current.add(taskId);
+    toast.warning("Tempo estimado ultrapassado", {
+      description: `"${taskName}" passou de ${estimatedMinutes} min.`,
+    });
+  };
+
 
   tasksRef.current = tasks;
   settingsRef.current = settings;
@@ -70,6 +88,9 @@ export function useTaskTimer() {
       if (info) setAppInfo(info);
       setNowMs(Date.now());
       setHydrated(true);
+      if (isTauri()) {
+        void requestNotificationPermission();
+      }
     })();
     return () => {
       cancelled = true;
@@ -77,6 +98,21 @@ export function useTaskTimer() {
   }, []);
 
   const hasRunningTask = useMemo(() => tasks.some((t) => t.isRunning), [tasks]);
+
+  const markOvertimeAndToast = useCallback(
+    (taskId: string, taskName: string, estimatedMinutes: number) => {
+      const current = tasksRef.current;
+      if (!current.some((task) => task.id === taskId && task.overtimeNotified)) {
+        const updated = current.map((task) =>
+          task.id === taskId ? { ...task, overtimeNotified: true } : task,
+        );
+        setTasks(updated);
+        persist(updated, settingsRef.current);
+      }
+      toastOvertimeOnce(taskId, taskName, estimatedMinutes);
+    },
+    [persist],
+  );
 
   const checkOvertime = useCallback(
     (now: number) => {
@@ -86,10 +122,11 @@ export function useTaskTimer() {
       setTasks(updated);
       persist(updated, settingsRef.current);
       for (const task of newlyOvertime) {
-        void sendOvertimeNotification(task.name, task.estimatedMinutes);
-        toast.warning(`Tempo estimado ultrapassado`, {
-          description: `"${task.name}" passou de ${task.estimatedMinutes} min.`,
-        });
+        void (async () => {
+          // The command is idempotent; "already" means the Rust watchdog sent the OS notification.
+          await sendOvertimeNotification(task.name, task.estimatedMinutes, task.id);
+          toastOvertimeOnce(task.id, task.name, task.estimatedMinutes);
+        })();
       }
     },
     [persist],
@@ -128,10 +165,34 @@ export function useTaskTimer() {
     };
   }, [hasRunningTask, checkOvertime]);
 
+  // When the Rust watchdog fires while the webview is throttled, it emits this
+  // event so we can persist overtimeNotified and show a toast once JS wakes up.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<{ id: string; name: string; estimatedMinutes: number }>("overtime-detected", (event) => {
+          markOvertimeAndToast(event.payload.id, event.payload.name, event.payload.estimatedMinutes);
+        }),
+      )
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [markOvertimeAndToast]);
+
   const updateTasks = useCallback(
     (updater: (current: Task[]) => Task[]) => {
       setTasks((prev) => {
         const next = updater(prev);
+        pruneOvertimeToasts(next);
         persist(next, settingsRef.current);
         return next;
       });
@@ -186,14 +247,7 @@ export function useTaskTimer() {
     (taskId: string) => {
       const now = Date.now();
       setNowMs(now);
-      if (
-        !isTauri() &&
-        typeof window !== "undefined" &&
-        "Notification" in window &&
-        Notification.permission === "default"
-      ) {
-        void Notification.requestPermission().catch(() => undefined);
-      }
+      void requestNotificationPermission();
       updateTasks((prev) =>
         prev.map((task) => {
           if (task.id !== taskId || task.status !== "active") return task;

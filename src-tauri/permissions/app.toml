@@ -17,3 +17,8 @@ commands.allow = ["save_app_data"]
 identifier = "allow-minimize-to-tray"
 description = "Allows hiding the main window to the system tray."
 commands.allow = ["minimize_to_tray"]
+
+[[permission]]
+identifier = "allow-notify-overtime"
+description = "Allows showing a native overtime notification (deduped on the Rust side)."
+commands.allow = ["notify_overtime"]
