@@ -14,6 +14,7 @@ import {
   loadPersistedData,
   minimizeToTray,
   savePersistedData,
+  ensureSingleInstance,
   setStartMinimizedPreference,
   type AppInfo,
 } from "@/lib/tauri-bridge";
@@ -159,6 +160,24 @@ describe("tray and start-minimized stubs", () => {
     isTauri.mockReturnValue(true);
     expect(await setStartMinimizedPreference(true)).toBe(true);
     expect(await setStartMinimizedPreference(false)).toBe(true);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("single-instance stub", () => {
+  beforeEach(() => {
+    isTauri.mockReturnValue(false);
+    invoke.mockReset();
+  });
+
+  it("is a no-op that returns true in the browser without calling invoke", async () => {
+    expect(await ensureSingleInstance()).toBe(true);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op that returns true inside Tauri (enforced on the Rust side)", async () => {
+    isTauri.mockReturnValue(true);
+    expect(await ensureSingleInstance()).toBe(true);
     expect(invoke).not.toHaveBeenCalled();
   });
 });

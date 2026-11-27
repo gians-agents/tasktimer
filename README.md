@@ -14,7 +14,9 @@ A interface atual é uma aplicação web (Vite, React e TanStack Start). A integ
 - Exportação e importação de tarefas em JSON
 - Persistência local (as tarefas permanecem ao fechar e reabrir o app)
 
-No app desktop (Tauri), a bandeja do sistema e a opção de iniciar minimizado já estão disponíveis. Instância única e notificações nativas ao ultrapassar o tempo estimado entram em PRs seguintes.
+No app desktop (Tauri), a bandeja do sistema, a opção de iniciar minimizado e a instância única já estão disponíveis. Notificações nativas ao ultrapassar o tempo estimado entram em PRs seguintes.
+
+Uma segunda execução do TaskTimer não abre outra janela: o processo novo encerra e o já em execução mostra, desminimiza e foca a janela principal — mesmo se ela estiver oculta na bandeja ou se a preferência “iniciar minimizado” estiver ativa (essa preferência vale só na primeira abertura do processo).
 
 ## Desenvolvimento
 
