@@ -16,12 +16,14 @@ export const Route = createFileRoute("/")({
       { title: "TaskTimer — Timer de Tarefas" },
       {
         name: "description",
-        content: "Gerencie tarefas ativas com timer em tempo real, horas decimais, barra de progresso e histórico.",
+        content:
+          "Gerencie tarefas ativas com timer em tempo real, horas decimais, barra de progresso e histórico.",
       },
       { property: "og:title", content: "TaskTimer — Timer de Tarefas" },
       {
         property: "og:description",
-        content: "Gerencie tarefas ativas com timer em tempo real, horas decimais, barra de progresso e histórico.",
+        content:
+          "Gerencie tarefas ativas com timer em tempo real, horas decimais, barra de progresso e histórico.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -76,6 +78,7 @@ function Index() {
         onImportJson={(file) => void importJson(file)}
         onMinimizeToTray={() => void handleMinimizeToTray()}
         onToggleStartMinimized={(enabled) => void toggleStartMinimized(enabled)}
+        storageBlocked={Boolean(storageError)}
       />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">

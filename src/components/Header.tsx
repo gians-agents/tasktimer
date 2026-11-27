@@ -1,13 +1,5 @@
 import { useRef } from "react";
-import {
-  Download,
-  History,
-  Minimize2,
-  MoreHorizontal,
-  Plus,
-  Timer,
-  Upload,
-} from "lucide-react";
+import { Download, History, Minimize2, MoreHorizontal, Plus, Timer, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { isTauri } from "@/lib/tauri-bridge";
@@ -30,6 +22,7 @@ interface HeaderProps {
   onImportJson: (file?: File) => void;
   onMinimizeToTray: () => void;
   onToggleStartMinimized: (enabled: boolean) => void;
+  storageBlocked?: boolean;
 }
 
 export function Header({
@@ -42,6 +35,7 @@ export function Header({
   onImportJson,
   onMinimizeToTray,
   onToggleStartMinimized,
+  storageBlocked = false,
 }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,11 +74,25 @@ export function Header({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={onExportJson}>
+              <DropdownMenuItem
+                disabled={storageBlocked}
+                title={
+                  storageBlocked
+                    ? "Indisponível enquanto o arquivo de dados não puder ser carregado"
+                    : undefined
+                }
+                onSelect={onExportJson}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Exportar JSON
               </DropdownMenuItem>
               <DropdownMenuItem
+                disabled={storageBlocked}
+                title={
+                  storageBlocked
+                    ? "Indisponível enquanto o arquivo de dados não puder ser carregado"
+                    : undefined
+                }
                 onSelect={() => {
                   if (isTauri()) onImportJson();
                   else fileInputRef.current?.click();

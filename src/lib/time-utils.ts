@@ -1,5 +1,14 @@
 import type { PersistedAppData, ProgressTone, Task } from "@/types/task";
 
+/** Must stay in sync with `MAX_DATA_BYTES` in `src-tauri/src/storage.rs`. */
+export const MAX_DATA_BYTES = 5 * 1024 * 1024;
+
+export function assertImportPayloadSize(byteLength: number): void {
+  if (byteLength > MAX_DATA_BYTES) {
+    throw new Error(`arquivo de importação excede o limite de ${MAX_DATA_BYTES} bytes`);
+  }
+}
+
 export function formatDuration(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(safe / 3600);
@@ -36,7 +45,10 @@ export function getLiveElapsedSeconds(task: Task, nowMs: number): number {
 }
 
 /** Detects overtime from wall-clock elapsed time, even if JS timers were throttled. */
-export function findNewlyOvertimeTasks(tasks: Task[], nowMs: number): { tasks: Task[]; newlyOvertime: Task[] } {
+export function findNewlyOvertimeTasks(
+  tasks: Task[],
+  nowMs: number,
+): { tasks: Task[]; newlyOvertime: Task[] } {
   const newlyOvertime: Task[] = [];
   const next = tasks.map((task) => {
     if (!task.isRunning || task.overtimeNotified) return task;
@@ -98,12 +110,16 @@ export function parseImportedJson(rawJson: string): { tasks: Task[]; startMinimi
 
   const rawTasks = Array.isArray(parsed)
     ? parsed
-    : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as Record<string, unknown>)["tasks"])
+    : typeof parsed === "object" &&
+        parsed !== null &&
+        Array.isArray((parsed as Record<string, unknown>)["tasks"])
       ? ((parsed as Record<string, unknown>)["tasks"] as unknown[])
       : null;
 
   if (!rawTasks) {
-    throw new Error("Formato inválido: esperado um objeto com a lista 'tasks' ou um array de tarefas.");
+    throw new Error(
+      "Formato inválido: esperado um objeto com a lista 'tasks' ou um array de tarefas.",
+    );
   }
 
   const validTasks: Task[] = rawTasks.filter(isValidTask).map((task) => ({

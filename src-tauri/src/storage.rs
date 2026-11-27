@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -195,6 +197,16 @@ fn bak_path(path: &Path) -> PathBuf {
 }
 
 fn read_file(path: &Path) -> Result<Option<PersistedAppData>, StorageError> {
+    let meta = match fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(StorageError::Io(err)),
+    };
+    if meta.len() > MAX_DATA_BYTES as u64 {
+        return Err(StorageError::Invalid(format!(
+            "arquivo de dados excede o limite de {MAX_DATA_BYTES} bytes"
+        )));
+    }
     match fs::read_to_string(path) {
         Ok(raw) => parse_app_data(&raw).map(Some),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -292,12 +304,63 @@ pub fn sanitize_export_file_name(suggested: &str) -> String {
 pub fn with_json_extension(path: PathBuf) -> PathBuf {
     match path.extension().and_then(|ext| ext.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("json") => path,
-        _ => path.with_extension("json"),
+        // Append rather than replace, so confirming `relatorio.txt` in the
+        // Save dialog cannot silently write to an existing `relatorio.json`.
+        _ => {
+            let mut os = path.into_os_string();
+            os.push(".json");
+            PathBuf::from(os)
+        }
+    }
+}
+
+fn unique_sibling(path: &Path, suffix: &str) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let mut name = path
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new("export"))
+        .to_os_string();
+    name.push(format!(".{}.{nanos}.{seq}{suffix}", std::process::id()));
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join(name),
+        _ => PathBuf::from(name),
+    }
+}
+
+/// Replaces `dest` with `from` without touching a stable `*.json.bak` / `*.json.tmp`
+/// that the user may keep next to the chosen export path.
+fn replace_export_file(from: &Path, dest: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        let bak = unique_sibling(dest, ".bak");
+        if dest.exists() {
+            fs::rename(dest, &bak)?;
+        }
+        if let Err(err) = fs::rename(from, dest) {
+            if bak.exists() && !dest.exists() {
+                let _ = fs::rename(&bak, dest);
+            }
+            return Err(err);
+        }
+        if bak.exists() {
+            let _ = fs::remove_file(&bak);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        fs::rename(from, dest)
     }
 }
 
 /// Atomically writes a user-chosen JSON export (size-limited, must be valid JSON).
-/// Returns the final path (a `.json` extension is added when missing).
+/// Returns the final path (`.json` is appended when the extension is missing).
 pub fn write_export_json(path: &Path, contents: &str) -> Result<PathBuf, StorageError> {
     if contents.len() > MAX_DATA_BYTES {
         return Err(StorageError::Invalid(format!(
@@ -314,9 +377,9 @@ pub fn write_export_json(path: &Path, contents: &str) -> Result<PathBuf, Storage
         }
     }
 
-    let tmp = tmp_path(&path);
+    let tmp = unique_sibling(&path, ".tmp");
     fs::write(&tmp, contents.as_bytes())?;
-    if let Err(err) = replace_file(&tmp, &path) {
+    if let Err(err) = replace_export_file(&tmp, &path) {
         let _ = fs::remove_file(&tmp);
         return Err(StorageError::Io(err));
     }
@@ -544,13 +607,57 @@ mod tests {
         assert_eq!(fs::read_to_string(&written).unwrap(), contents);
         assert!(
             !tmp_path(&written).exists(),
-            "temporary file should be gone"
+            "stable .tmp sibling must not be used"
         );
         // Overwrite the same path atomically.
         let updated = "{\"ok\":false}";
         write_export_json(&written, updated).unwrap();
         assert_eq!(fs::read_to_string(&written).unwrap(), updated);
         let _ = fs::remove_file(&written);
+    }
+
+    #[test]
+    fn with_json_extension_appends_instead_of_replacing() {
+        assert_eq!(
+            with_json_extension(PathBuf::from("relatorio.txt")),
+            PathBuf::from("relatorio.txt.json")
+        );
+        assert_eq!(
+            with_json_extension(PathBuf::from("backup.JSON")),
+            PathBuf::from("backup.JSON")
+        );
+        assert_eq!(
+            with_json_extension(PathBuf::from("backup")),
+            PathBuf::from("backup.json")
+        );
+    }
+
+    #[test]
+    fn write_export_json_does_not_clobber_user_bak_or_tmp_siblings() {
+        let path = temp_path("native-export-siblings");
+        let user_bak = bak_path(&path);
+        let user_tmp = tmp_path(&path);
+        fs::write(&user_bak, "meu-backup").unwrap();
+        fs::write(&user_tmp, "meu-temporario").unwrap();
+
+        let written = write_export_json(&path, "{\"ok\":true}").unwrap();
+        assert_eq!(written, path);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"ok\":true}");
+        assert_eq!(fs::read_to_string(&user_bak).unwrap(), "meu-backup");
+        assert_eq!(fs::read_to_string(&user_tmp).unwrap(), "meu-temporario");
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&user_bak);
+        let _ = fs::remove_file(&user_tmp);
+    }
+
+    #[test]
+    fn load_from_path_rejects_oversized_data_file() {
+        let path = temp_path("oversized-app-data");
+        fs::write(&path, "a".repeat(MAX_DATA_BYTES + 1)).unwrap();
+        let err = load_from_path(&path).unwrap_err().to_string();
+        assert!(err.contains("excede o limite"));
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
