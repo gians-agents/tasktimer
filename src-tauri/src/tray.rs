@@ -57,7 +57,12 @@ pub fn toggle_main_window(app: &AppHandle) {
 }
 
 /// Closing the main window (the X button) hides it to the tray instead of quitting,
-/// so a running timer keeps ticking. Use "Sair" in the tray menu to exit for real.
+/// so the process — and a running timer — stay alive. Use "Sair" in the tray menu
+/// to exit for real.
+///
+/// Elapsed time is wall-clock (`lastStartedAt`), so a frozen WebView is corrected
+/// when the window is shown again. Overtime toasts/notifications still depend on
+/// the JS interval in the webview and may be delayed while the window is hidden.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if window.label() != MAIN_WINDOW_LABEL {
         return;
