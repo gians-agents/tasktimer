@@ -18,6 +18,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             tray::setup(app)?;
             overtime::setup(app)?;
@@ -29,7 +30,9 @@ pub fn run() {
             commands::load_app_data,
             commands::save_app_data,
             commands::minimize_to_tray,
-            commands::notify_overtime
+            commands::notify_overtime,
+            commands::export_json,
+            commands::import_json
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,7 +14,7 @@ A interface atual é uma aplicação web (Vite, React e TanStack Start). A integ
 - Exportação e importação de tarefas em JSON
 - Persistência local (as tarefas permanecem ao fechar e reabrir o app)
 
-No app desktop (Tauri), a bandeja do sistema, a opção de iniciar minimizado, a instância única e as notificações nativas ao ultrapassar o tempo estimado já estão disponíveis.
+No app desktop (Tauri), a bandeja do sistema, a opção de iniciar minimizado, a instância única, as notificações nativas ao ultrapassar o tempo estimado e a exportação JSON com o diálogo nativo “Salvar como” já estão disponíveis.
 
 Uma segunda execução do TaskTimer não abre outra janela: o processo novo encerra e o já em execução mostra, desminimiza e foca a janela principal — mesmo se ela estiver oculta na bandeja ou se a preferência “iniciar minimizado” estiver ativa (essa preferência vale só na primeira abertura do processo).
 
@@ -30,7 +30,14 @@ Clicar na notificação tenta mostrar, desminimizar e focar a janela principal. 
 
 **Windows:** em builds de desenvolvimento/não assinadas o plugin pode exibir o nome e o ícone do PowerShell. A identidade do TaskTimer vale nos pacotes instalados (`Only works for installed apps` na documentação do plugin).
 
-A exportação nativa em “Salvar como” entra em um PR seguinte.
+## Exportação e importação JSON (desktop)
+
+No app desktop, **Exportar JSON** abre o diálogo nativo “Salvar como”, com o nome sugerido `tasktimer-YYYY-MM-DD.json` (data local) e filtro `*.json`. O caminho é escolhido pelo usuário no diálogo e a escrita é feita por um comando Rust (gravação atômica, limite de 5 MB) — o frontend não recebe permissão ampla de sistema de arquivos. Se o diálogo for cancelado, nada acontece (sem toast de erro). Em caso de falha na gravação, aparece um toast de erro. No sucesso, o toast mostra o caminho do arquivo.
+
+**Importar JSON** no desktop abre o diálogo nativo “Abrir”, lê o arquivo escolhido (mesmo limite de tamanho) e aplica as tarefas na interface. Cancelar também é silencioso. A validação do conteúdo continua no frontend (`parseImportedJson`).
+
+No navegador, a exportação segue o download por âncora e a importação usa o seletor de arquivo da página.
+
 
 ## Desenvolvimento
 

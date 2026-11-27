@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isTauri } from "@/lib/tauri-bridge";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -26,7 +27,7 @@ interface HeaderProps {
   onAddClick: () => void;
   onHistoryClick: () => void;
   onExportJson: () => void;
-  onImportJson: (file: File) => void;
+  onImportJson: (file?: File) => void;
   onMinimizeToTray: () => void;
   onToggleStartMinimized: (enabled: boolean) => void;
 }
@@ -83,7 +84,12 @@ export function Header({
                 <Download className="mr-2 h-4 w-4" />
                 Exportar JSON
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (isTauri()) onImportJson();
+                  else fileInputRef.current?.click();
+                }}
+              >
                 <Upload className="mr-2 h-4 w-4" />
                 Importar JSON
               </DropdownMenuItem>

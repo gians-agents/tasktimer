@@ -72,7 +72,7 @@ function Index() {
         appVersion={appInfo?.version}
         onAddClick={openCreateDialog}
         onHistoryClick={() => setHistoryOpen(true)}
-        onExportJson={exportJson}
+        onExportJson={() => void exportJson()}
         onImportJson={(file) => void importJson(file)}
         onMinimizeToTray={() => void handleMinimizeToTray()}
         onToggleStartMinimized={(enabled) => void toggleStartMinimized(enabled)}

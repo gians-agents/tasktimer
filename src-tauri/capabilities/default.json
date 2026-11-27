@@ -13,6 +13,8 @@
     "allow-save-app-data",
     "allow-minimize-to-tray",
     "allow-notify-overtime",
+    "allow-export-json",
+    "allow-import-json",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission"
   ]

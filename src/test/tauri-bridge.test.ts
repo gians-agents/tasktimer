@@ -25,6 +25,9 @@ import {
   requestNotificationPermission,
   sendOvertimeNotification,
   setStartMinimizedPreference,
+  defaultExportFileName,
+  saveExportedJson,
+  pickImportedJson,
   type AppInfo,
 } from "@/lib/tauri-bridge";
 import type { PersistedAppData } from "@/types/task";
@@ -277,5 +280,92 @@ describe("native overtime notifications", () => {
     isPermissionGranted.mockResolvedValue(true);
     expect(await requestNotificationPermission()).toBe(true);
     expect(requestPermission).not.toHaveBeenCalled();
+  });
+});
+
+describe("native JSON export and import", () => {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    isTauri.mockReturnValue(false);
+    invoke.mockReset();
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+  });
+
+  it("builds a local-date default filename", () => {
+    expect(defaultExportFileName(new Date(2026, 10, 27))).toBe("tasktimer-2026-11-27.json");
+  });
+
+  it("falls back to an anchor download in the browser", async () => {
+    const click = vi.fn();
+    URL.createObjectURL = vi.fn(() => "blob:export") as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    const realCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tag: string, options?: ElementCreationOptions) => {
+      if (tag === "a") {
+        return { href: "", download: "", click } as unknown as HTMLAnchorElement;
+      }
+      return realCreate(tag, options);
+    });
+
+    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).resolves.toEqual({
+      status: "browser",
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:export");
+    createSpy.mockRestore();
+  });
+
+  it("invokes export_json inside Tauri and returns the saved path", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockResolvedValue("/tmp/tasktimer-2026-11-27.json");
+    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).resolves.toEqual({
+      status: "saved",
+      path: "/tmp/tasktimer-2026-11-27.json",
+    });
+    expect(invoke).toHaveBeenCalledWith("export_json", {
+      contents: '{"tasks":[]}',
+      defaultFileName: "tasktimer-2026-11-27.json",
+    });
+  });
+
+  it("returns cancelled when the user closes the Save dialog", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockResolvedValue(null);
+    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).resolves.toEqual({
+      status: "cancelled",
+    });
+  });
+
+  it("throws when the Tauri export command fails", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockRejectedValue(new Error("disco cheio"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(saveExportedJson('{"tasks":[]}', "tasktimer-2026-11-27.json")).rejects.toThrow("disco cheio");
+    spy.mockRestore();
+  });
+
+  it("pickImportedJson is a no-op outside Tauri", async () => {
+    expect(await pickImportedJson()).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the Open dialog is cancelled", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockResolvedValue(null);
+    expect(await pickImportedJson()).toBeNull();
+    expect(invoke).toHaveBeenCalledWith("import_json");
+  });
+
+  it("returns the file text when a JSON file is picked", async () => {
+    isTauri.mockReturnValue(true);
+    invoke.mockResolvedValue('{"tasks":[]}');
+    expect(await pickImportedJson()).toBe('{"tasks":[]}');
   });
 });

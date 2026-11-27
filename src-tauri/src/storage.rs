@@ -274,6 +274,71 @@ fn write_to_path(path: &Path, data: &PersistedAppData) -> Result<(), StorageErro
     Ok(())
 }
 
+/// Keeps a simple basename (no directories) and ensures a `.json` suffix.
+pub fn sanitize_export_file_name(suggested: &str) -> String {
+    const FALLBACK: &str = "tasktimer-export.json";
+    let name = Path::new(suggested)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(str::trim)
+        .filter(|n| !n.is_empty() && *n != "." && *n != ".." && !n.contains(['/', '\\']))
+        .unwrap_or(FALLBACK);
+    match Path::new(name).extension().and_then(|ext| ext.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("json") => name.to_string(),
+        _ => format!("{name}.json"),
+    }
+}
+
+pub fn with_json_extension(path: PathBuf) -> PathBuf {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("json") => path,
+        _ => path.with_extension("json"),
+    }
+}
+
+/// Atomically writes a user-chosen JSON export (size-limited, must be valid JSON).
+/// Returns the final path (a `.json` extension is added when missing).
+pub fn write_export_json(path: &Path, contents: &str) -> Result<PathBuf, StorageError> {
+    if contents.len() > MAX_DATA_BYTES {
+        return Err(StorageError::Invalid(format!(
+            "arquivo de exportação excede o limite de {MAX_DATA_BYTES} bytes"
+        )));
+    }
+    serde_json::from_str::<serde_json::Value>(contents)
+        .map_err(|err| StorageError::Invalid(format!("JSON de exportação inválido: {err}")))?;
+
+    let path = with_json_extension(path.to_path_buf());
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+
+    let tmp = tmp_path(&path);
+    fs::write(&tmp, contents.as_bytes())?;
+    if let Err(err) = replace_file(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(StorageError::Io(err));
+    }
+    Ok(path)
+}
+
+/// Reads a user-chosen import file with the same size cap as persisted data.
+pub fn read_import_json(path: &Path) -> Result<String, StorageError> {
+    let meta = fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(StorageError::Invalid(
+            "o caminho selecionado não é um arquivo".into(),
+        ));
+    }
+    if meta.len() > MAX_DATA_BYTES as u64 {
+        return Err(StorageError::Invalid(format!(
+            "arquivo de importação excede o limite de {MAX_DATA_BYTES} bytes"
+        )));
+    }
+    Ok(fs::read_to_string(path)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +518,64 @@ mod tests {
         assert!(load_from_path(&path).is_err());
         assert!(path.exists(), "corrupt file must be left untouched");
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn sanitize_export_file_name_keeps_a_safe_basename() {
+        assert_eq!(
+            sanitize_export_file_name("tasktimer-2026-11-27.json"),
+            "tasktimer-2026-11-27.json"
+        );
+        assert_eq!(
+            sanitize_export_file_name("/tmp/evil/../../tasktimer-2026-11-27.json"),
+            "tasktimer-2026-11-27.json"
+        );
+        assert_eq!(sanitize_export_file_name("backup"), "backup.json");
+        assert_eq!(sanitize_export_file_name(""), "tasktimer-export.json");
+        assert_eq!(sanitize_export_file_name(".."), "tasktimer-export.json");
+    }
+
+    #[test]
+    fn write_export_json_is_atomic_and_adds_json_extension() {
+        let path = temp_path("native-export").with_extension("");
+        let contents = "{\n  \"ok\": true\n}";
+        let written = write_export_json(&path, contents).unwrap();
+        assert_eq!(written.extension().unwrap(), "json");
+        assert_eq!(fs::read_to_string(&written).unwrap(), contents);
+        assert!(
+            !tmp_path(&written).exists(),
+            "temporary file should be gone"
+        );
+        // Overwrite the same path atomically.
+        let updated = "{\"ok\":false}";
+        write_export_json(&written, updated).unwrap();
+        assert_eq!(fs::read_to_string(&written).unwrap(), updated);
+        let _ = fs::remove_file(&written);
+    }
+
+    #[test]
+    fn write_export_json_rejects_invalid_or_oversized_payloads() {
+        let path = temp_path("native-export-invalid");
+        assert!(write_export_json(&path, "{not-json").is_err());
+        assert!(!path.exists());
+        let oversized = format!(r#""{}""#, "a".repeat(MAX_DATA_BYTES));
+        assert!(oversized.len() > MAX_DATA_BYTES);
+        assert!(write_export_json(&path, &oversized).is_err());
+        assert!(!path.exists());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn read_import_json_enforces_size_limit() {
+        let path = temp_path("native-import");
+        fs::write(&path, r#"{"tasks":[]}"#).unwrap();
+        assert_eq!(read_import_json(&path).unwrap(), r#"{"tasks":[]}"#);
+
+        let huge = path.with_file_name("native-import-huge.json");
+        fs::write(&huge, "a".repeat(MAX_DATA_BYTES + 1)).unwrap();
+        let err = read_import_json(&huge).unwrap_err().to_string();
+        assert!(err.contains("excede o limite"));
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&huge);
     }
 }
