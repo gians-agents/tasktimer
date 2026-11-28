@@ -1,0 +1,25 @@
+# When a GitHub Release is published, trigger the Pages deploy workflow
+# on main. The Pages environment only allows deployments from main, so
+# this workflow must not run the deploy jobs against the release tag.
+name: Dispatch Pages deploy on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch Pages workflow on main
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Trigger Pages deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run static-site.yml --ref main -R "${{ github.repository }}"
